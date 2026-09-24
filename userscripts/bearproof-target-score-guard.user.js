@@ -1,14 +1,12 @@
 // ==UserScript==
 // @name         Bearproof target-score guard
 // @namespace    bearproof-survivor-bot
-// @version      1.1.0
-// @description  Bearproof development helper: keep the exposed simulation alive until a target score, then restore normal death behavior.
-// @match        http://localhost/*
-// @match        http://127.0.0.1/*
-// @match        http://bearproof.app/*
-// @match        https://bearproof.app/*
-// @match        http://www.bearproof.app/*
-// @match        https://www.bearproof.app/*
+// @version      1.2.0
+// @description  Bearproof Build #2 development helper with target-score guard and verified run submission.
+// @match        http://localhost/b/2/*
+// @match        http://127.0.0.1/b/2/*
+// @match        https://bearproof.app/b/2/*
+// @match        https://www.bearproof.app/b/2/*
 // @run-at       document-start
 // @grant        GM_addStyle
 // ==/UserScript==
@@ -18,6 +16,9 @@
 
   const page = window;
   const STORAGE_KEY = 'bearproof-target-score';
+  const PLAYER_ID_KEY = 'bearproof-player-id';
+  const PLAYER_NAME_KEY = 'bearproof-player-name';
+  const BUILD = 2;
   const DEFAULT_TARGET = 80000;
   const POLL_MS = 100;
   let target = readTarget();
@@ -28,6 +29,8 @@
   let pollHandle = null;
   let panel;
   let status;
+  let submitButton;
+  let submitted = false;
 
   function readTarget() {
     const value = Number(localStorage.getItem(STORAGE_KEY));
@@ -43,6 +46,119 @@
   function getSimulation() {
     const hook = getHook();
     return hook && hook.game && hook.game.sim ? hook.game.sim : null;
+  }
+
+  function getRunExport() {
+    const hook = getHook();
+    if (!hook) return null;
+    const exporters = [hook.exportRun, hook.exportReplay, hook.getReplay]
+      .filter((candidate) => typeof candidate === 'function');
+    for (const exporter of exporters) {
+      try {
+        const result = exporter.call(hook);
+        if (result) return result;
+      } catch (error) {
+        console.warn('[Bearproof] replay export failed:', error);
+      }
+    }
+    return hook.runExport || hook.run || hook.replay || hook.replayLog || null;
+  }
+
+  function bytesToBase64Url(value) {
+    if (typeof value === 'string') return value;
+    const bytes = value instanceof Uint8Array
+      ? value
+      : value instanceof ArrayBuffer
+        ? new Uint8Array(value)
+        : Array.isArray(value)
+          ? Uint8Array.from(value)
+          : null;
+    if (!bytes) return null;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  }
+
+  function playerId() {
+    let value = localStorage.getItem(PLAYER_ID_KEY);
+    if (!value) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(PLAYER_ID_KEY, value);
+    }
+    return value;
+  }
+
+  function getSubmissionPayload() {
+    const hook = getHook();
+    const sim = getSimulation();
+    const summary = hook?.summary?.();
+    const exported = getRunExport();
+    if (!summary || !sim || !exported) return { error: 'The page has not exposed a completed replay for submission.' };
+    const source = exported.payload || exported;
+    const log = bytesToBase64Url(source.log || source.replay || source.replayLog || source.bytes || source);
+    if (!log) return { error: 'The page exposed run details but no replay log.' };
+    if (!sim.over) return { error: 'Finish the run before submitting it.' };
+    const metadata = hook.runInfo || hook.session || {};
+    const payload = {
+      v: 1,
+      playerId: metadata.playerId || playerId(),
+      name: metadata.name || localStorage.getItem(PLAYER_NAME_KEY) || 'Tampermonkey player',
+      mode: metadata.mode || 'free',
+      build: Number(metadata.build || hook.build || BUILD),
+      seed: Number(metadata.seed ?? sim.seed),
+      stage: summary.stage,
+      claimed: {
+        score: summary.score,
+        timeMs: summary.timeMs,
+        kills: summary.kills,
+        level: summary.level
+      },
+      durationMs: summary.timeMs,
+      log
+    };
+    if (metadata.challengeDate) payload.challengeDate = metadata.challengeDate;
+    return { payload };
+  }
+
+  async function submitRun() {
+    if (submitted) return;
+    const nameInput = panel?.querySelector('[data-player-name]');
+    const name = String(nameInput?.value || '').trim();
+    if (name) localStorage.setItem(PLAYER_NAME_KEY, name);
+    const result = getSubmissionPayload();
+    if (result.error) {
+      setStatus(result.error, 'error');
+      return;
+    }
+    submitButton.disabled = true;
+    setStatus('Submitting verified replay…', 'waiting');
+    try {
+      const headers = { 'content-type': 'application/json' };
+      const session = await fetch('/api/session', {
+        method: 'POST', headers,
+        body: JSON.stringify({ playerId: result.payload.playerId, build: result.payload.build, mode: result.payload.mode })
+      });
+      if (!session.ok) throw new Error(`Session setup failed (${session.status})`);
+      const player = await fetch('/api/player', {
+        method: 'POST', headers,
+        body: JSON.stringify({ playerId: result.payload.playerId, name: result.payload.name })
+      });
+      if (!player.ok) throw new Error(`Player setup failed (${player.status})`);
+      const response = await fetch('/api/runs', {
+        method: 'POST', headers, body: JSON.stringify(result.payload)
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error?.message || data?.error || `API request failed (${response.status})`);
+      submitted = true;
+      setStatus(data?.rank ? `Submitted; board rank #${data.rank}.` : 'Submitted; verification pending.', 'done');
+    } catch (error) {
+      submitButton.disabled = false;
+      setStatus(`Submission failed: ${error.message}`, 'error');
+    }
   }
 
   function setStatus(text, kind) {
@@ -113,12 +229,14 @@
     root.innerHTML = `
       <strong>Target-score guard</strong>
       <label>Target score <input type="number" min="1" step="1000" value="${target}"></label>
-      <div class="bsg-actions"><button type="button" data-action="start">Start guard</button><button type="button" data-action="stop">Stop</button></div>
+      <label>Board name <input data-player-name type="text" maxlength="32" value="${(localStorage.getItem(PLAYER_NAME_KEY) || '').replaceAll('"', '&quot;')}"></label>
+      <div class="bsg-actions"><button type="button" data-action="start">Start guard</button><button type="button" data-action="stop">Stop</button><button type="button" data-action="submit">Submit run</button></div>
       <small data-status>Development debug hook only.</small>
     `;
     document.documentElement.appendChild(root);
     panel = root;
     status = root.querySelector('[data-status]');
+    submitButton = root.querySelector('[data-action="submit"]');
     const input = root.querySelector('input');
     input.addEventListener('change', () => {
       const next = Number(input.value);
@@ -132,6 +250,7 @@
     });
     root.querySelector('[data-action="start"]').addEventListener('click', enable);
     root.querySelector('[data-action="stop"]').addEventListener('click', () => disable('stopped'));
+    submitButton.addEventListener('click', submitRun);
     setStatus(getHook() ? 'Ready.' : 'Waiting for __bearproof debug hook…', 'waiting');
   }
 
@@ -139,13 +258,17 @@
     GM_addStyle(`
       #bearproof-target-guard { position: fixed; z-index: 2147483647; top: 12px; right: 12px; width: 230px; padding: 12px; color: #d8ffe7; background: #101615ee; border: 1px solid #28e878; box-shadow: 0 4px 18px #0008; font: 12px/1.35 system-ui, sans-serif; }
       #bearproof-target-guard strong { display: block; margin-bottom: 8px; color: #28e878; }
-      #bearproof-target-guard label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      #bearproof-target-guard label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; }
       #bearproof-target-guard input { width: 100px; color: #d8ffe7; background: #17201d; border: 1px solid #527c63; padding: 3px 5px; }
+      #bearproof-target-guard input[data-player-name] { width: 108px; }
       #bearproof-target-guard button { margin-top: 8px; margin-right: 5px; color: #07110b; background: #28e878; border: 0; padding: 5px 8px; cursor: pointer; }
       #bearproof-target-guard button[data-action="stop"] { color: #fff; background: #704040; }
+      #bearproof-target-guard button[data-action="submit"] { color: #fff; background: #3465a4; }
+      #bearproof-target-guard button:disabled { cursor: wait; opacity: .6; }
       #bearproof-target-guard small { display: block; margin-top: 8px; color: #b7c7bc; }
       #bearproof-target-guard small[data-kind="done"] { color: #ffd166; }
       #bearproof-target-guard small[data-kind="active"] { color: #28e878; }
+      #bearproof-target-guard small[data-kind="error"] { color: #ff8a8a; }
     `);
     if (document.documentElement) buildPanel();
     else document.addEventListener('DOMContentLoaded', buildPanel, { once: true });
