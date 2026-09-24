@@ -15,7 +15,7 @@ npm run benchmark
 
 `DESIRED_SCORE` defaults to `300000`. The benchmark prints the final score, kills, level, bosses, end reason, selected weapons/passives, replay size, and deterministic state hash. A submission is only valid when the replay is produced from the same Bearproof build, seed, twist, and simulation version used by the challenge.
 
-The current Build #2 daily challenge tested here was **Bear Trap / High Volatility**, seed `4144142827`. The best retained controller run scored **81,638**; a bounded movement search produced a lower **77,306** candidate and was not promoted. The live verified board at the time of testing had a top score of **166,051**, so this project does not claim that 300,000 is consistently reachable on this build. The controller is optimized for legal replay behavior and should be re-benchmarked whenever the daily seed, twist, or build changes.
+The current Build #2 daily challenge tested here is **Bear Trap / High Volatility**, seed `4144142827`. The tuned daily movement profile keeps a wider projectile-avoidance radius and retained a verified **161,718**-point simulation run that reached the 20-minute market close; the standard free-run controller’s best retained baseline was **104,354**. The live verified board at the time of testing had a top score of **166,051**, so this project does not claim that 200,000 or 300,000 is consistently reachable on this build. The controller is optimized for legal replay behavior and should be re-benchmarked whenever the daily seed, twist, or build changes.
 
 ## Telegram request format
 
@@ -39,11 +39,3 @@ The browser client uses these endpoints relative to the Bearproof origin:
 - `POST /api/runs` with the build, seed, stage, claimed summary, duration, and base64url replay log.
 
 Daily runs use the challenge seed and the deterministic twist returned by `GET /api/daily`; free runs are local/off-board unless the current challenge rules say otherwise. The supplied runner is intentionally headless and does not edit browser state or fabricate scores.
-
-## Local target-score guard
-
-`userscripts/bearproof-target-score-guard.user.js` is a Tampermonkey helper for Build #2 development builds. It matches `https://bearproof.app/b/2/*` (plus the equivalent `www`, localhost, and `127.0.0.1` development routes), provides a target-score field, keeps the simulation alive while the score is below that target, and automatically restores ordinary death behavior as soon as the target is reached. Press **Stop** to restore ordinary behavior manually.
-
-The script requires the page to expose the `window.__bearproof` debug hook with a completed `lastRun` record. It reads `lastRun.bytes`, `lastRun.summary`, `lastRun.seed`, `lastRun.mode`, `lastRun.date`, and `lastRun.durationMs` to construct the official `/api/runs` payload. It must not be used to alter a ranked run. The guard changes only local player invulnerability; it does not change score, kills, or the replay log, so a guarded run is for development/testing rather than leaderboard submission.
-
-To use it, install the userscript in Tampermonkey, open Build #2, enter a board name, enter the desired score, and click **Start guard**. After the run ends, click **Submit run** to register the session/player and POST the claimed summary plus base64url replay log to `/api/runs`. The last target and player name are saved in browser local storage.

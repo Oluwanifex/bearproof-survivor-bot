@@ -62,11 +62,11 @@ export function chooseUpgrade(sim) {
   return bestIndex;
 }
 
-export function runBot(seed, { mode = 'free', twist = null, phase = 0 } = {}) {
+export function runBot(seed, { mode = 'free', twist = null, phase = 0, style = 'survive' } = {}) {
   const resolvedTwist = mode === 'daily' ? (twist || dailyTwistForSeed(seed)) : null;
   const sim = new Simulation({ seed, twist: resolvedTwist });
   const recorder = new RunRecorder(seed, resolvedTwist);
-  const bot = createBot({ style: 'survive', phase });
+  const bot = createBot({ style, phase });
   while (!sim.over) {
     if (sim.choices) {
       const index = chooseUpgrade(sim);
@@ -82,12 +82,12 @@ export function runBot(seed, { mode = 'free', twist = null, phase = 0 } = {}) {
   return { summary: sim.summary(), log: recorder.toBytes(), hash: sim.stateHash(), twist: resolvedTwist };
 }
 
-export function createInteractiveRun(seed, { mode = 'free', twist = null, phase = 0 } = {}) {
+export function createInteractiveRun(seed, { mode = 'free', twist = null, phase = 0, style = 'survive' } = {}) {
   const resolvedTwist = mode === 'daily' ? (twist || dailyTwistForSeed(seed)) : null;
   return {
     sim: new Simulation({ seed, twist: resolvedTwist }),
     recorder: new RunRecorder(seed, resolvedTwist),
-    bot: createBot({ style: 'survive', phase }),
+    bot: createBot({ style, phase }),
     seed,
     twist: resolvedTwist,
     mode,

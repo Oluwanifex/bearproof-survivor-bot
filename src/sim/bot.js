@@ -27,12 +27,15 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 // Kite: close in on the nearest bear, back off from anything inside ~90 units, dodge shots,
                 // and hoover up XP when the coast is clear.
                 const target = nearest(sim.enemies, p);
+                const dailyProfile = style === 'daily';
+                const threatRadius = dailyProfile ? 70 : 48;
+                const projectileMultiplier = dailyProfile ? 4.5 : 1.5;
                 let crowd = 0;
                 for (const e of sim.enemies) {
                     const dx = p.x - e.x;
                     const dy = p.y - e.y;
                     const d2 = dx * dx + dy * dy;
-                    const keep = (e.boss ? 150 : 48) + e.size;
+                    const keep = (e.boss ? 150 : threatRadius) + e.size;
                     if (d2 > keep * keep) continue;
                     const w = (e.boss ? 3 : 1) / (d2 + 40);
                     fx += dx * w;
@@ -44,8 +47,8 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                     const dy = p.y - b.y;
                     const d2 = dx * dx + dy * dy;
                     if (d2 < 110 * 110) {
-                        fx += (dx * 1.5) / (d2 + 30);
-                        fy += (dy * 1.5) / (d2 + 30);
+                        fx += (dx * projectileMultiplier) / (d2 + 30);
+                        fy += (dy * projectileMultiplier) / (d2 + 30);
                     }
                 }
                 const orb = nearest(sim.xp, p, 420);
