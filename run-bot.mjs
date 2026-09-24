@@ -82,6 +82,47 @@ export function runBot(seed, { mode = 'free', twist = null, phase = 0 } = {}) {
   return { summary: sim.summary(), log: recorder.toBytes(), hash: sim.stateHash(), twist: resolvedTwist };
 }
 
+export function createInteractiveRun(seed, { mode = 'free', twist = null, phase = 0 } = {}) {
+  const resolvedTwist = mode === 'daily' ? (twist || dailyTwistForSeed(seed)) : null;
+  return {
+    sim: new Simulation({ seed, twist: resolvedTwist }),
+    recorder: new RunRecorder(seed, resolvedTwist),
+    bot: createBot({ style: 'survive', phase }),
+    seed,
+    twist: resolvedTwist,
+    mode,
+  };
+}
+
+export function upgradeDescription(card) {
+  if (card.kind === 'heal') return 'Take Profit · restore 30 HP';
+  const title = String(card.id).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const tags = [card.isNew ? 'new' : null, card.evolves ? 'evolution' : null, card.level ? `level ${card.level}` : null].filter(Boolean);
+  return `${title}${tags.length ? ` · ${tags.join(' · ')}` : ''}`;
+}
+
+export function advanceInteractiveRun(run, { choice = null, maxTicks = 3_000 } = {}) {
+  const { sim, recorder, bot } = run;
+  if (sim.choices) {
+    if (!Number.isInteger(choice) || choice < 0 || choice >= sim.choices.length) {
+      return { status: 'choice', choices: sim.choices };
+    }
+    recorder.pick(sim.tick, choice);
+    sim.choose(choice);
+  }
+  let ticks = 0;
+  while (!sim.over && !sim.choices && ticks < maxTicks) {
+    const code = bot.move(sim);
+    recorder.tick(code);
+    sim.step(code);
+    sim.drainEvents();
+    ticks += 1;
+  }
+  if (sim.choices) return { status: 'choice', choices: sim.choices, summary: sim.summary() };
+  if (sim.over) return { status: 'done', summary: sim.summary(), log: recorder.toBytes(), hash: sim.stateHash(), twist: run.twist };
+  return { status: 'running', summary: sim.summary() };
+}
+
 if (process.argv[1]?.endsWith('/run-bot.mjs')) {
   const seeds = process.argv.slice(2).map(Number).filter(Number.isFinite);
   for (const seed of seeds.length ? seeds : DEFAULT_SEEDS) {

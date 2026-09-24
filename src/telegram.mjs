@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
-import { Telegraf } from 'telegraf';
-import { runBot } from '../run-bot.mjs';
+import { Markup, Telegraf } from 'telegraf';
+import { advanceInteractiveRun, createInteractiveRun, upgradeDescription } from '../run-bot.mjs';
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
 const BUILD = Number(process.env.BEARPROOF_BUILD || 2);
@@ -31,36 +31,116 @@ async function api(path, options = {}) {
 }
 async function daily() { return api('/api/daily'); }
 
-bot.start((ctx) => ctx.reply('Bearproof Survivor Bot ready. Use /Play <username> <Solana address>.'));
+function choiceKeyboard(chatId, choices) {
+  return Markup.inlineKeyboard(choices.map((card, index) => [
+    Markup.button.callback(`${index + 1}. ${upgradeDescription(card)}`, `upgrade:${chatId}:${index}`)
+  ]));
+}
+
+async function promptUpgrade(ctx, session, summary) {
+  const choices = session.run.sim.choices || [];
+  const lines = [
+    `Level ${summary.level} reached · score ${summary.score.toLocaleString()}`,
+    `HP: ${Math.ceil(session.run.sim.player.hp)}/${Math.ceil(session.run.sim.player.maxHp)}`,
+    'Choose your upgrade:',
+    ...choices.map((card, index) => `${index + 1}. ${upgradeDescription(card)}`)
+  ];
+  session.waitingForUpgrade = true;
+  await ctx.reply(lines.join('\n'), choiceKeyboard(ctx.chat.id, choices));
+}
+
+async function submitFinished(ctx, session, result) {
+  const summary = result.summary;
+  const response = await api('/api/runs', { method: 'POST', body: JSON.stringify({
+    v: 1,
+    playerId: session.playerId,
+    name: session.name,
+    mode: 'daily',
+    challengeDate: session.challenge.date,
+    build: BUILD,
+    seed: session.challenge.seed,
+    stage: summary.stage,
+    claimed: { score: summary.score, timeMs: summary.timeMs, kills: summary.kills, level: summary.level },
+    durationMs: summary.timeMs,
+    log: Buffer.from(result.log).toString('base64url')
+  }) });
+  await ctx.reply(`Run complete: ${summary.score.toLocaleString()} score, ${summary.kills.toLocaleString()} kills, level ${summary.level}, ${summary.reason}.\n${response.rank ? `Board rank: #${response.rank}` : 'Verification pending.'}`);
+}
+
+async function continueRun(ctx, session, choice = null) {
+  const result = advanceInteractiveRun(session.run, { choice });
+  if (result.status === 'choice') return promptUpgrade(ctx, session, result.summary || session.run.sim.summary());
+  if (result.status === 'done') {
+    await submitFinished(ctx, session, result);
+    sessions.delete(ctx.chat.id);
+    return;
+  }
+  // Keep the event loop responsive while advancing a long deterministic run.
+  setImmediate(() => continueRun(ctx, session).catch((error) => {
+    console.error(error);
+    sessions.delete(ctx.chat.id);
+    ctx.reply(`Bearproof run failed safely: ${error.message}`).catch(() => {});
+  }));
+}
+
+bot.start((ctx) => ctx.reply('Bearproof Survivor Bot ready. Use /Play <username> <Solana address>. You will choose every level-up upgrade.'));
+
 bot.command('play', async (ctx) => {
   const args = ctx.message.text.replace(/^\/play(?:@\w+)?\s*/i, '').trim().split(/\s+/).filter(Boolean);
   if (args.length !== 2) return ctx.reply('Format: /Play <username> <Solana address>');
   let name; let payout;
   try { name = username(args[0]); payout = address(args[1]); } catch (error) { return ctx.reply(error.message); }
   if (sessions.has(ctx.chat.id)) return ctx.reply('A Bearproof run is already active for this chat.');
-  sessions.set(ctx.chat.id, true);
+  const session = { name, payout, telegramUserId: ctx.from?.id, playerId: playerId(ctx.chat.id), waitingForUpgrade: false };
+  sessions.set(ctx.chat.id, session);
   try {
     const challenge = await daily();
     if (Number(challenge.build) !== BUILD) throw new Error(`Daily board is Build #${challenge.build}; this controller is Build #${BUILD}.`);
-    const id = playerId(ctx.chat.id);
-    await api('/api/session', { method: 'POST', body: JSON.stringify({ playerId: id, build: BUILD, mode: 'daily' }) });
-    await api('/api/player', { method: 'POST', body: JSON.stringify({ playerId: id, name }) });
-    await api('/api/payout-address', { method: 'POST', body: JSON.stringify({ playerId: id, address: payout }) });
-    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name}…`);
-    const run = runBot(challenge.seed, { mode: 'daily', twist: challenge.twist?.id });
-    const summary = run.summary;
-    const result = await api('/api/runs', { method: 'POST', body: JSON.stringify({
-      v: 1, playerId: id, name, mode: 'daily', challengeDate: challenge.date, build: BUILD,
-      seed: challenge.seed, stage: summary.stage,
-      claimed: { score: summary.score, timeMs: summary.timeMs, kills: summary.kills, level: summary.level },
-      durationMs: summary.timeMs, log: Buffer.from(run.log).toString('base64url')
-    }) });
-    await ctx.reply(`Run complete: ${summary.score.toLocaleString()} score, ${summary.kills.toLocaleString()} kills, level ${summary.level}, ${summary.reason}.\n${result.rank ? `Board rank: #${result.rank}` : 'Verification pending.'}`);
+    session.challenge = challenge;
+    await api('/api/session', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, build: BUILD, mode: 'daily' }) });
+    await api('/api/player', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, name }) });
+    await api('/api/payout-address', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, address: payout }) });
+    session.run = createInteractiveRun(challenge.seed, { mode: 'daily', twist: challenge.twist?.id });
+    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name}. I will ask you after every level-up.`);
+    await continueRun(ctx, session);
   } catch (error) {
     console.error(error);
+    sessions.delete(ctx.chat.id);
     await ctx.reply(`Bearproof run failed safely: ${error.message}`);
-  } finally { sessions.delete(ctx.chat.id); }
+  }
 });
+
+bot.action(/^upgrade:(-?\d+):(\d+)$/, async (ctx) => {
+  const chatId = Number(ctx.match[1]);
+  const index = Number(ctx.match[2]);
+  const session = sessions.get(chatId);
+  if (!session || !session.run) return ctx.answerCbQuery('This run is no longer active.');
+  if (ctx.from?.id !== session.telegramUserId) return ctx.answerCbQuery('Only the player who started this run can choose.');
+  if (!session.waitingForUpgrade) return ctx.answerCbQuery('The bot is not waiting for an upgrade.');
+  if (!session.run.sim.choices?.[index]) return ctx.answerCbQuery('That upgrade choice is no longer available.');
+  session.waitingForUpgrade = false;
+  await ctx.answerCbQuery(`Selected ${index + 1}`);
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+  try { await continueRun(ctx, session, index); }
+  catch (error) {
+    console.error(error);
+    sessions.delete(chatId);
+    await ctx.reply(`Bearproof run failed safely: ${error.message}`);
+  }
+});
+
+bot.command('status', async (ctx) => {
+  const session = sessions.get(ctx.chat.id);
+  if (!session?.run) return ctx.reply('No active run. Use /Play <username> <Solana address>.');
+  const summary = session.run.sim.summary();
+  return ctx.reply(`Time ${Math.round(summary.timeMs / 1000)}s · score ${summary.score.toLocaleString()} · kills ${summary.kills} · level ${summary.level} · HP ${Math.ceil(session.run.sim.player.hp)}/${Math.ceil(session.run.sim.player.maxHp)}${session.waitingForUpgrade ? '\nWaiting for your upgrade choice.' : ''}`);
+});
+
+bot.command('stop', async (ctx) => {
+  if (!sessions.delete(ctx.chat.id)) return ctx.reply('No active run.');
+  return ctx.reply('Run stopped. No score was submitted.');
+});
+
 bot.launch().then(() => console.log('Bearproof bot listening'));
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
