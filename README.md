@@ -39,3 +39,11 @@ The browser client uses these endpoints relative to the Bearproof origin:
 - `POST /api/runs` with the build, seed, stage, claimed summary, duration, and base64url replay log.
 
 Daily runs use the challenge seed and the deterministic twist returned by `GET /api/daily`; free runs are local/off-board unless the current challenge rules say otherwise. The supplied runner is intentionally headless and does not edit browser state or fabricate scores.
+
+## Local target-score guard
+
+`userscripts/bearproof-target-score-guard.user.js` is a Tampermonkey helper for local development builds. It provides a target-score field, keeps the local simulation alive while the score is below that target, and automatically restores ordinary death behavior as soon as the target is reached. Press **Stop** to restore ordinary behavior manually.
+
+The script intentionally matches only `http://localhost/*` and `http://127.0.0.1/*`. The production client does not expose the `window.__bearproof` debug hook, and the script must not be used to alter a ranked run. The guard changes only local player invulnerability; it does not change score, kills, or the replay log, so a guarded run is for development/testing rather than leaderboard submission.
+
+To use it, run the browser client locally with its localhost-only debug hook enabled, install the userscript in Tampermonkey, open the local game, enter the desired score, and click **Start guard**. The last target is saved in browser local storage under `bearproof-target-score`.
