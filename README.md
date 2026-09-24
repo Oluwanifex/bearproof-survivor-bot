@@ -17,6 +17,25 @@ npm run benchmark
 
 The current Build #2 daily challenge tested here is **Bear Trap / High Volatility**, seed `4144142827`. The tuned daily movement profile keeps a wider projectile-avoidance radius and retained a verified **161,718**-point simulation run that reached the 20-minute market close; the standard free-run controller’s best retained baseline was **104,354**. The live verified board at the time of testing had a top score of **166,051**, so this project does not claim that 200,000 or 300,000 is consistently reachable on this build. The controller is optimized for legal replay behavior and should be re-benchmarked whenever the daily seed, twist, or build changes.
 
+## Railway deployment
+
+This repository deploys as a **Telegram long-polling worker**, not as an HTTP web server. Railway should deploy it as a single service from the repository root. The checked-in `railway.json` explicitly uses Railpack, runs `npm ci && npm run build` during the build, starts the worker with `npm start`, and restarts it after an unexpected exit. No public domain, `PORT`, or health-check path is required for the Telegram polling mode.
+
+In the Railway service's **Variables** tab, add the following required variable:
+
+| Variable | Required value |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | The token from BotFather for this bot. Keep it secret; do not commit it. |
+
+The following variables are optional because the application has safe defaults:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `BEARPROOF_URL` | `https://bearproof.app` | Override the Bearproof API origin only for a compatible environment. |
+| `BEARPROOF_BUILD` | `2` | Build number sent to the Bearproof API; keep `2` for the current project. |
+
+`DESIRED_SCORE` is used only by the local benchmark command and is not needed for the Railway worker. Do not set `NODE_ENV` or `PORT` to make this service work; Node 22 is pinned in `package.json` and the worker uses Telegram long polling. After deploying, the Railway logs should show `Bearproof bot listening`. In Telegram, send `/start`, then `/Play <username> <Solana address>` to exercise the workflow. Do not create more than one production service with the same Telegram bot token, because Telegram polling allows only one active consumer for a bot token.
+
 ## Telegram request format
 
 The requested intake format is:

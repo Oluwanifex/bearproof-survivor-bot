@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "description": "Deterministic Bearproof controller with legal movement codes, upgrade choices, replay logs, and Telegram run intake.",
   "scripts": {
     "start": "node src/telegram.mjs",
