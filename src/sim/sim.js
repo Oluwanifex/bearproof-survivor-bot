@@ -77,8 +77,15 @@ export class Simulation {
         this.over = false;
         this.won = false;
         this.endReason = null;
-        this.stats = { kills: 0, score: 0, bossKills: 0, damageTaken: 0, damageDealt: 0 };
+        this.stats = {
+            kills: 0, score: 0, bossKills: 0, damageTaken: 0, damageDealt: 0,
+            damageByWeapon: Object.create(null), bossDamage: 0, bossDamageById: Object.create(null), xpSpawned: 0,
+            xpCollected: 0, xpExpired: 0, damageTakenBySource: Object.create(null),
+            rangeTicks: Object.create(null), scoreByMinute: Object.create(null), choices: [],
+            xpExpiredByInterval: Object.create(null), xpExpiredByCell: Object.create(null)
+        };
         this.events = [];
+        this.botMove = null;
     }
 
     emit(ev) {
@@ -112,6 +119,11 @@ export class Simulation {
 
         this.spatial.rebuild(this.enemies);
         const p = this.player;
+        for (const w of p.weapons) {
+            const range = w.getRange(p);
+            const inRange = this.enemies.some((e) => e.hp > 0 && Math.hypot(e.x - p.x, e.y - p.y) <= range);
+            if (inRange) this.stats.rangeTicks[w.id] = (this.stats.rangeTicks[w.id] || 0) + 1;
+        }
         p.update(dt, this, mx, my);
         if (p.dead) return this._end('liquidated');
 
@@ -127,9 +139,14 @@ export class Simulation {
         this._spawn(dt);
         if (p.dead) return this._end('liquidated');
 
-        if (this.tick % SIM.TICK_RATE === 0) this.stats.score += SIM.SCORE_PER_SECOND;
-        if (this.won) return this._end('won');
-        if (this.tick >= SIM.MAX_TICKS) return this._end('market_closed');
+        if (this.tick % SIM.TICK_RATE === 0) {
+            this.stats.score += SIM.SCORE_PER_SECOND;
+            const minute = Math.floor(this.time / 60);
+            this.stats.scoreByMinute[minute] = this.stats.score;
+        }
+        if (this.won && process.env.FARM_AFTER_WIN !== '1') return this._end('won');
+        const maxTicks = Number(process.env.MAX_TICKS || 72000);
+        if (this.tick >= maxTicks) return this._end(this.won ? 'won' : 'market_closed');
         if (this.pendingLevelUps > 0) this._rollChoices();
         return true;
     }
@@ -245,6 +262,7 @@ export class Simulation {
             this.stats.kills++;
             this.stats.score += e.boss ? e.exp * SIM.BOSS_SCORE_MULT : e.exp;
             this.xp.push(new XpOrb(e.x, e.y, e.exp));
+            this.stats.xpSpawned += e.exp;
         }
         this.emit({ t: 'kill', x: e.x, y: e.y, id: e.id, boss: e.boss, self: !!e.selfDestructed });
         if (e.boss) {
@@ -346,13 +364,27 @@ export class Simulation {
     damageEnemy(e, amount, crit, src, quiet = false) {
         const dealt = e.takeDamage(amount);
         this.stats.damageDealt += dealt;
+        const weapon = src || 'unknown';
+        this.stats.damageByWeapon[weapon] = (this.stats.damageByWeapon[weapon] || 0) + dealt;
+        if (e.boss) this.stats.bossDamage += dealt;
+        if (e.boss) this.stats.bossDamageById[e.id] = (this.stats.bossDamageById[e.id] || 0) + dealt;
         if (!quiet) this.emit({ t: 'dmg', x: e.x, y: e.y - e.size, v: dealt, crit, src });
         return dealt;
     }
 
     collectXp(orb) {
         this.pendingLevelUps += this.player.gainExp(orb.value);
+        this.stats.xpCollected += orb.value;
         this.emit({ t: 'pickup', x: orb.x, y: orb.y, v: orb.value });
+    }
+
+    recordXpExpiration(orb) {
+        const interval = `${Math.floor(this.time / 30) * 30}-${Math.floor(this.time / 30) * 30 + 30}s`;
+        const cellX = Math.floor(orb.x / 240);
+        const cellY = Math.floor(orb.y / 240);
+        const cell = `${cellX},${cellY}`;
+        this.stats.xpExpiredByInterval[interval] = (this.stats.xpExpiredByInterval[interval] || 0) + orb.value;
+        this.stats.xpExpiredByCell[cell] = (this.stats.xpExpiredByCell[cell] || 0) + orb.value;
     }
 
     // --- Level-ups ----------------------------------------------------------
@@ -400,6 +432,7 @@ export class Simulation {
             picks.push(pool.splice(this.rng.int(pool.length), 1)[0]);
         while (picks.length < 3) picks.push({ kind: 'heal', id: 'take_profit', amount: 30 });
         this.choices = picks;
+        this.stats.choices.push({ level: this.player.level, choices: picks.map((c) => ({ ...c })) });
         this.emit({ t: 'levelup', level: this.player.level, choices: picks });
     }
 
@@ -445,7 +478,45 @@ export class Simulation {
             twist: this.twistId,
             weapons: this.player.weapons.map((w) => [w.id, w.level]),
             passives: this.player.passiveOrder.map((id) => [id, this.player.passives[id].count])
+            , telemetry: {
+                damageDealt: this.stats.damageDealt,
+                damageByWeapon: { ...this.stats.damageByWeapon },
+                bossDamage: this.stats.bossDamage,
+                bossDamageById: { ...this.stats.bossDamageById },
+                xpSpawned: this.stats.xpSpawned,
+                xpCollected: this.stats.xpCollected,
+                xpExpired: this.stats.xpExpired,
+                xpExpiredByInterval: { ...this.stats.xpExpiredByInterval },
+                xpExpiredByCell: { ...this.stats.xpExpiredByCell },
+                damageTaken: this.stats.damageTaken,
+                damageTakenBySource: { ...this.stats.damageTakenBySource },
+                rangeSeconds: Object.fromEntries(Object.entries(this.stats.rangeTicks).map(([id, n]) => [id, n / SIM.TICK_RATE])),
+                scoreByMinute: { ...this.stats.scoreByMinute },
+                choices: this.stats.choices.length
+            }
         };
+    }
+
+    /** Clone gameplay state for bounded deterministic policy lookahead. */
+    clone() {
+        const copy = new Simulation({ seed: this.seed, stage: this.stageId, twist: this.twistId });
+        const cloneValue = (value, seen = new Map()) => {
+            if (value === null || typeof value !== 'object') return value;
+            if (seen.has(value)) return seen.get(value);
+            if (value instanceof Map) { const out = new Map(); seen.set(value, out); for (const [k, v] of value) out.set(cloneValue(k, seen), cloneValue(v, seen)); return out; }
+            if (value instanceof Set) { const out = new Set(); seen.set(value, out); for (const v of value) out.add(cloneValue(v, seen)); return out; }
+            if (Array.isArray(value)) { const out = []; seen.set(value, out); for (const v of value) out.push(cloneValue(v, seen)); return out; }
+            const out = Object.create(Object.getPrototypeOf(value)); seen.set(value, out);
+            for (const key of Object.keys(value)) out[key] = cloneValue(value[key], seen);
+            return out;
+        };
+        for (const key of ['tick', 'time', 'stageId', 'twist', 'twistId', 'stageMods', 'waves', 'bossPlan', 'bossWarned', 'bossSpawned', 'player', 'enemies', 'projectiles', 'enemyProjectiles', 'mines', 'xp', 'spawnAcc', 'coldAcc', 'enemyDmgMult', 'hpMult', 'wave', 'pendingLevelUps', 'choices', 'picks', 'over', 'won', 'endReason', 'stats']) copy[key] = cloneValue(this[key]);
+        copy.rng = cloneValue(this.rng);
+        copy.delayed = [];
+        copy.events = [];
+        copy.botMove = null;
+        copy.spatial.rebuild(copy.enemies);
+        return copy;
     }
 
     /** FNV-1a over the exact bits of the state that matters. Used by determinism tests. */
