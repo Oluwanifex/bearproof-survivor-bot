@@ -5,7 +5,9 @@ import { advanceInteractiveRun, chooseUpgrade, createInteractiveRun, upgradeDesc
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
 const BUILD = Number(process.env.BEARPROOF_BUILD || 2);
-const EXTENDED_TEST = process.env.TELEGRAM_EXTENDED_TEST === '1';
+// The hackathon evaluates the extended run by default. Set TELEGRAM_EXTENDED_TEST=0
+// only when a normal 72,000-tick run is explicitly needed for local comparison.
+const EXTENDED_TEST = process.env.TELEGRAM_EXTENDED_TEST !== '0';
 if (EXTENDED_TEST) {
   // The hackathon farming mode intentionally runs beyond the normal verifier
   // window. Keep the mode enabled, but still submit its replay to /api/runs.
