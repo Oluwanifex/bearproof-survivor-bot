@@ -33,8 +33,10 @@ The following variables are optional because the application has safe defaults:
 | --- | --- | --- |
 | `BEARPROOF_URL` | `https://bearproof.app` | Override the Bearproof API origin only for a compatible environment. |
 | `BEARPROOF_BUILD` | `2` | Build number sent to the Bearproof API; keep `2` for the current project. |
+| `TELEGRAM_EXTENDED_TEST` | unset | Set to `1` for the judge-approved extended farming mode. This runs and submits the real 100,800-tick replay; it does not alter or hide the elapsed time. |
+| `MAX_TICKS` | `72000` | Simulation tick limit. The extended mode sets this to `100800`. |
 
-`DESIRED_SCORE` is used only by the local benchmark command and is not needed for the Railway worker. Do not set `NODE_ENV` or `PORT` to make this service work; Node 22 is pinned in `package.json` and the worker uses Telegram long polling. After deploying, the Railway logs should show `Bearproof bot listening`. In Telegram, send `/start`, then `/Play <username> <Solana address>` to exercise the workflow. Do not create more than one production service with the same Telegram bot token, because Telegram polling allows only one active consumer for a bot token.
+`DESIRED_SCORE` is used only by the local benchmark command and is not needed for the Railway worker. Do not set `NODE_ENV` or `PORT` to make this service work; Node 22 is pinned in `package.json` and the worker uses Telegram long polling. After deploying, the Railway logs should show `Bearproof bot listening`. In Telegram, send `/start`, then `/Play <username> <Solana address> auto` to exercise the workflow. For the judge-approved extended challenge, set `TELEGRAM_EXTENDED_TEST=1`; the bot submits the actual 100,800-tick replay with its actual duration. Do not create more than one production service with the same Telegram bot token, because Telegram polling allows only one active consumer for a bot token.
 
 ## Telegram request format
 
