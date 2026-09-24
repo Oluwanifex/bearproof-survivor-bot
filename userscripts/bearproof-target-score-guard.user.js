@@ -48,20 +48,17 @@
     return hook && hook.game && hook.game.sim ? hook.game.sim : null;
   }
 
-  function getRunExport() {
+  function getLastRun() {
     const hook = getHook();
     if (!hook) return null;
-    const exporters = [hook.exportRun, hook.exportReplay, hook.getReplay]
-      .filter((candidate) => typeof candidate === 'function');
-    for (const exporter of exporters) {
-      try {
-        const result = exporter.call(hook);
-        if (result) return result;
-      } catch (error) {
-        console.warn('[Bearproof] replay export failed:', error);
-      }
+    try {
+      if (typeof hook.lastRun === 'function') return hook.lastRun();
+      if (hook.lastRun) return hook.lastRun;
+      if (hook.game?.lastRun) return hook.game.lastRun;
+    } catch (error) {
+      console.warn('[Bearproof] lastRun read failed:', error);
     }
-    return hook.runExport || hook.run || hook.replay || hook.replayLog || null;
+    return null;
   }
 
   function bytesToBase64Url(value) {
@@ -96,31 +93,31 @@
     const hook = getHook();
     const sim = getSimulation();
     const summary = hook?.summary?.();
-    const exported = getRunExport();
-    if (!summary || !sim || !exported) return { error: 'The page has not exposed a completed replay for submission.' };
-    const source = exported.payload || exported;
-    const log = bytesToBase64Url(source.log || source.replay || source.replayLog || source.bytes || source);
+    const run = getLastRun();
+    if (!summary || !sim || !run) return { error: 'The page has not exposed a completed lastRun for submission.' };
+    const log = bytesToBase64Url(run.bytes);
     if (!log) return { error: 'The page exposed run details but no replay log.' };
-    if (!sim.over) return { error: 'Finish the run before submitting it.' };
+    if (!run.summary || !Number.isFinite(Number(run.seed))) return { error: 'The lastRun record is incomplete.' };
     const metadata = hook.runInfo || hook.session || {};
+    const runSummary = run.summary;
     const payload = {
       v: 1,
       playerId: metadata.playerId || playerId(),
       name: metadata.name || localStorage.getItem(PLAYER_NAME_KEY) || 'Tampermonkey player',
-      mode: metadata.mode || 'free',
+      mode: run.mode || metadata.mode || 'free',
       build: Number(metadata.build || hook.build || BUILD),
-      seed: Number(metadata.seed ?? sim.seed),
-      stage: summary.stage,
+      seed: Number(run.seed),
+      stage: runSummary.stage,
       claimed: {
-        score: summary.score,
-        timeMs: summary.timeMs,
-        kills: summary.kills,
-        level: summary.level
+        score: runSummary.score,
+        timeMs: runSummary.timeMs,
+        kills: runSummary.kills,
+        level: runSummary.level
       },
-      durationMs: summary.timeMs,
+      durationMs: Number(run.durationMs || runSummary.timeMs),
       log
     };
-    if (metadata.challengeDate) payload.challengeDate = metadata.challengeDate;
+    if (run.date || metadata.challengeDate) payload.challengeDate = run.date || metadata.challengeDate;
     return { payload };
   }
 
@@ -229,7 +226,7 @@
     root.innerHTML = `
       <strong>Target-score guard</strong>
       <label>Target score <input type="number" min="1" step="1000" value="${target}"></label>
-      <label>Board name <input data-player-name type="text" maxlength="32" value="${(localStorage.getItem(PLAYER_NAME_KEY) || '').replaceAll('"', '&quot;')}"></label>
+      <label>Board name <input data-player-name type="text" maxlength="16" value="${(localStorage.getItem(PLAYER_NAME_KEY) || '').replaceAll('"', '&quot;')}"></label>
       <div class="bsg-actions"><button type="button" data-action="start">Start guard</button><button type="button" data-action="stop">Stop</button><button type="button" data-action="submit">Submit run</button></div>
       <small data-status>Development debug hook only.</small>
     `;
