@@ -1,10 +1,14 @@
 // ==UserScript==
-// @name         Bearproof target-score guard (local dev)
+// @name         Bearproof target-score guard
 // @namespace    bearproof-survivor-bot
-// @version      1.0.0
-// @description  Local development helper: keep the exposed simulation alive until a target score, then restore normal death behavior.
+// @version      1.1.0
+// @description  Bearproof development helper: keep the exposed simulation alive until a target score, then restore normal death behavior.
 // @match        http://localhost/*
 // @match        http://127.0.0.1/*
+// @match        http://bearproof.app/*
+// @match        https://bearproof.app/*
+// @match        http://www.bearproof.app/*
+// @match        https://www.bearproof.app/*
 // @run-at       document-start
 // @grant        GM_addStyle
 // ==/UserScript==
@@ -73,7 +77,7 @@
   function tick() {
     const sim = getSimulation();
     if (!sim) {
-      if (enabled) setStatus('Waiting for the local __bearproof debug hook…', 'waiting');
+      if (enabled) setStatus('Waiting for the __bearproof debug hook…', 'waiting');
       return;
     }
 
@@ -110,7 +114,7 @@
       <strong>Target-score guard</strong>
       <label>Target score <input type="number" min="1" step="1000" value="${target}"></label>
       <div class="bsg-actions"><button type="button" data-action="start">Start guard</button><button type="button" data-action="stop">Stop</button></div>
-      <small data-status>Local debug hook only.</small>
+      <small data-status>Development debug hook only.</small>
     `;
     document.documentElement.appendChild(root);
     panel = root;
@@ -128,7 +132,7 @@
     });
     root.querySelector('[data-action="start"]').addEventListener('click', enable);
     root.querySelector('[data-action="stop"]').addEventListener('click', () => disable('stopped'));
-    setStatus(getHook() ? 'Ready.' : 'Waiting for local __bearproof debug hook…', 'waiting');
+    setStatus(getHook() ? 'Ready.' : 'Waiting for __bearproof debug hook…', 'waiting');
   }
 
   function start() {

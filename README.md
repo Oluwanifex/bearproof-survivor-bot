@@ -42,8 +42,8 @@ Daily runs use the challenge seed and the deterministic twist returned by `GET /
 
 ## Local target-score guard
 
-`userscripts/bearproof-target-score-guard.user.js` is a Tampermonkey helper for local development builds. It provides a target-score field, keeps the local simulation alive while the score is below that target, and automatically restores ordinary death behavior as soon as the target is reached. Press **Stop** to restore ordinary behavior manually.
+`userscripts/bearproof-target-score-guard.user.js` is a Tampermonkey helper for development builds. It provides a target-score field, keeps the simulation alive while the score is below that target, and automatically restores ordinary death behavior as soon as the target is reached. Press **Stop** to restore ordinary behavior manually.
 
-The script intentionally matches only `http://localhost/*` and `http://127.0.0.1/*`. The production client does not expose the `window.__bearproof` debug hook, and the script must not be used to alter a ranked run. The guard changes only local player invulnerability; it does not change score, kills, or the replay log, so a guarded run is for development/testing rather than leaderboard submission.
+The script matches the Bearproof site as well as `localhost` and `127.0.0.1`, so judges can install it and test the project from the hosted game URL. The production client may not expose the `window.__bearproof` debug hook, and the script must not be used to alter a ranked run. The guard changes only local player invulnerability; it does not change score, kills, or the replay log, so a guarded run is for development/testing rather than leaderboard submission.
 
-To use it, run the browser client locally with its localhost-only debug hook enabled, install the userscript in Tampermonkey, open the local game, enter the desired score, and click **Start guard**. The last target is saved in browser local storage under `bearproof-target-score`.
+To use it, install the userscript in Tampermonkey, open the Bearproof game or local development client with its `__bearproof` debug hook enabled, enter the desired score, and click **Start guard**. The last target is saved in browser local storage under `bearproof-target-score`.
