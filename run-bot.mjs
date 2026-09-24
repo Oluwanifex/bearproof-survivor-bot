@@ -1,7 +1,7 @@
 import { Simulation } from './src/sim/sim.js';
 import { createBot } from './src/sim/bot.js';
 import { RunRecorder, toBase64Url } from './src/sim/runlog.js';
-import { dailyTwistForSeed } from './src/sim/content.js';
+import { dailyTwistForSeed, PASSIVES, WEAPONS } from './src/sim/content.js';
 
 const TARGET = Number(process.env.DESIRED_SCORE || 300_000);
 const DEFAULT_SEEDS = [1, 42, 424242, 8675309, 20260924];
@@ -96,9 +96,15 @@ export function createInteractiveRun(seed, { mode = 'free', twist = null, phase 
 
 export function upgradeDescription(card) {
   if (card.kind === 'heal') return 'Take Profit · restore 30 HP';
-  const title = String(card.id).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const definition = card.kind === 'weapon'
+    ? Object.values(WEAPONS).find((weapon) => weapon.id === card.id)
+    : Object.values(PASSIVES).find((passive) => passive.id === card.id);
+  const title = definition?.name || String(card.id).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   const tags = [card.isNew ? 'new' : null, card.evolves ? 'evolution' : null, card.level ? `level ${card.level}` : null].filter(Boolean);
-  return `${title}${tags.length ? ` · ${tags.join(' · ')}` : ''}`;
+  const effect = card.evolves
+    ? definition?.evolveDescription
+    : definition?.description;
+  return `${title}${tags.length ? ` · ${tags.join(' · ')}` : ''}${effect ? ` — ${effect}` : ''}`;
 }
 
 export function advanceInteractiveRun(run, { choice = null, maxTicks = 3_000 } = {}) {

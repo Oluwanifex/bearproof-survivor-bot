@@ -38,15 +38,16 @@ The following variables are optional because the application has safe defaults:
 
 ## Telegram request format
 
-The requested intake format is:
+The requested intake formats are:
 
 ```text
 /Play <username> <address>
+/Play <username> <address> auto
 ```
 
 For Bearproof, `<address>` must be a **Solana public address** (base58, 32–44 characters). The username is the Bearproof board name. The bot should start a daily or free run, drive the simulation with the legal replay inputs, submit the verified claimed summary and encoded log to `/api/runs`, and associate the payout address through `/api/payout-address`. Never collect or transmit a private key or seed phrase.
 
-During a Telegram run, the simulation pauses at every level-up and sends three inline buttons containing the available upgrade cards. The user selects one button; that exact card index is recorded in the deterministic replay, and the bot resumes. `/status` reports the current score, kills, level, HP, and whether an upgrade selection is pending. `/stop` cancels the run without submission.
+During a manual Telegram run, the simulation pauses at every level-up and sends three inline buttons containing the available upgrade cards. Each card includes its level/evolution state and the concrete effect it provides, such as `Damage +10%`, `Attack speed +8%`, or `A five-beam fan with +10% crit`. The user selects one button; that exact card index is recorded in the deterministic replay, and the bot resumes. Adding the final `auto` argument selects every upgrade using the controller's high-score policy without waiting for Telegram input. `/status` reports the current score, kills, level, HP, mode, and whether an upgrade selection is pending. `/stop` cancels the run without submission.
 
 ## Server contract
 
