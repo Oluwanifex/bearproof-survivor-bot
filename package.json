@@ -11,7 +11,8 @@
     "start": "node src/telegram.mjs",
     "test": "node --test",
     "benchmark": "node run-bot.mjs",
-    "lint": "node --check run-bot.mjs && node --check src/telegram.mjs && node --check src/sim/bot.js && node --check src/sim/sim.js && node --check src/sim/planner.js",
+    "today": "node run-today.mjs",
+    "lint": "node --check run-bot.mjs && node --check run-today.mjs && node --check src/telegram.mjs && node --check src/sim/bot.js && node --check src/sim/sim.js && node --check src/sim/planner.js",
     "build": "npm run lint && npm test"
   },
   "dependencies": {

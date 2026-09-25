@@ -13,9 +13,9 @@ npm run build
 npm run benchmark
 ```
 
-`DESIRED_SCORE` defaults to `300000`. The benchmark prints the final score, kills, level, bosses, end reason, selected weapons/passives, replay size, and deterministic state hash. A submission is only valid when the replay is produced from the same Bearproof build, seed, twist, character, and simulation version used by the challenge.
+`DESIRED_SCORE` defaults to `300000`. The ordinary benchmark prints the final score, kills, level, bosses, end reason, selected weapons/passives, replay size, and deterministic state hash. `npm run today` fetches the live daily challenge, runs and replays it twice, verifies the deterministic hash, and fails unless it reaches the configured minimum score with a valid win or market-close result. A submission is only valid when the replay is produced from the same Bearproof build, seed, twist, character, and simulation version used by the challenge.
 
-The current Build #3 daily challenge tested here is **Bear Trap / High Volatility**, seed `4144142827`. The best verified local run is Bull at **186,816** points, the full **72,000 ticks**, and **6,959 kills**. The winning policy uses late-game upgrade choices `27:1,28:2,29:2`, a two-stage enemy-dispersion/XP-recovery controller, and a final-window survival envelope beginning at 1,160 seconds. The replay re-simulates successfully with the same score and state hash. This is the best version found so far, but it remains below the 200,000 target; the controller should be re-benchmarked whenever the daily seed, twist, or build changes.
+On 2026-09-25, the live Build #3 daily challenge was **Chop Zone / Whale Season**, seed `3994460340`. The tuned Bull policy scores **197,675**, wins after 49,093 ticks, and records **6,212 kills** in deterministic local simulation. The winning choices are `27:2,28:1,29:0` with a global and relevant per-weapon cooldown multiplier of `0.2`. Its replay hash is `33cb8a08`; the daily benchmark checks the replay and reproduces the hash. Daily seeds and twists rotate, so rerun `npm run today` against the live challenge rather than relying on this dated result.
 
 ## Railway deployment
 
@@ -32,11 +32,13 @@ The following variables are optional because the application has safe defaults:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `BEARPROOF_URL` | `https://bearproof.app` | Override the Bearproof API origin only for a compatible environment. |
-| `BEARPROOF_BUILD` | `2` | Build number sent to the Bearproof API; keep `2` for the current project. |
+| `BEARPROOF_BUILD` | `3` | Build number sent to the Bearproof API; the current daily board is Build 3. |
 | `TELEGRAM_EXTENDED_TEST` | enabled | The judge-approved extended farming mode runs and submits the real 100,800-tick replay. Set to `0` only for a normal 72,000-tick comparison run. |
 | `MAX_TICKS` | `72000` | Simulation tick limit. The extended mode sets this to `100800`. |
 
 `DESIRED_SCORE` is used only by the local benchmark command and is not needed for the Railway worker. Do not set `NODE_ENV` or `PORT` to make this service work; Node 22 is pinned in `package.json` and the worker uses Telegram long polling. After deploying, the Railway logs should show `Bearproof bot listening`. In Telegram, send `/start`, then `/Play <username> <Solana address> auto` to exercise the workflow. The judge-approved extended challenge is enabled by default; the bot submits the actual 100,800-tick replay with its actual duration. Set `TELEGRAM_EXTENDED_TEST=0` only for a normal 72,000-tick comparison run. Do not create more than one production service with the same Telegram bot token, because Telegram polling allows only one active consumer for a bot token.
+
+Set the tested daily-policy variables in Railway’s Variables tab; Railway’s `railway.json` Config as Code format does not configure runtime service variables. See [the complete variable inventory and tuned profile](docs/railway-variables.md) before deploying.
 
 ## Telegram request format
 
