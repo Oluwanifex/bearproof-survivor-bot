@@ -4,7 +4,7 @@ import { Markup, Telegraf } from 'telegraf';
 import { advanceInteractiveRun, chooseUpgrade, createInteractiveRun, upgradeDescription } from '../run-bot.mjs';
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
-const BUILD = Number(process.env.BEARPROOF_BUILD || 2);
+const BUILD = Number(process.env.BEARPROOF_BUILD || 3);
 // The hackathon evaluates the extended run by default. Set TELEGRAM_EXTENDED_TEST=0
 // only when a normal 72,000-tick run is explicitly needed for local comparison.
 const EXTENDED_TEST = process.env.TELEGRAM_EXTENDED_TEST !== '0';
