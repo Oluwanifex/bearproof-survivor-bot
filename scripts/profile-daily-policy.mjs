@@ -24,11 +24,10 @@ const fixed = {
   USE_PLANNER: '1',
 };
 const variants = [
-  { name: 'repeat_1170_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1170', FINAL_BOSS_LATEST_ENGAGE_AT: '1184' } },
-  { name: 'engage_1168_minus2_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1168', FINAL_BOSS_LATEST_ENGAGE_AT: '1182' } },
-  { name: 'engage_1172_plus2_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1172', FINAL_BOSS_LATEST_ENGAGE_AT: '1186' } },
-  { name: 'repeat_1170_check_hash_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1170', FINAL_BOSS_LATEST_ENGAGE_AT: '1184' } },
-  { name: 'test_xp010', env: { ...fixed, DAILY_XP_ATTRACTION: '0.010', FINAL_BOSS_ENGAGE_AT: '1170', FINAL_BOSS_LATEST_ENGAGE_AT: '1184' } },
+  { name: 'repeat_1180_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1180', FINAL_BOSS_LATEST_ENGAGE_AT: '1198' } },
+  { name: 'engage_1178_minus2_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1178', FINAL_BOSS_LATEST_ENGAGE_AT: '1196' } },
+  { name: 'engage_1182_plus2_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1182', FINAL_BOSS_LATEST_ENGAGE_AT: '1200' } },
+  { name: 'repeat_1180_check_hash_xp012', env: { ...fixed, FINAL_BOSS_ENGAGE_AT: '1180', FINAL_BOSS_LATEST_ENGAGE_AT: '1198' } },
 ];
 
 function runVariant(variant) {

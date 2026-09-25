@@ -2,7 +2,7 @@
 
 ## Verified Build 3 daily policy
 
-Use these values in the Telegram worker service’s **Railway Variables** tab to reproduce the tested policy. The best full replay on 2026-09-25’s Build 3 challenge (seed `3994460340`, `whale_season`, Chop Zone) scored **311,000**, survived for 19:46.75, defeated all four bosses, and reached level 36. The same settings reproduced the same score and replay hash twice. These values do not include secrets.
+Use these values in the Telegram worker service’s **Railway Variables** tab to reproduce the tested policy. The best verified replay in the final-boss timing sweep on 2026-09-25’s Build 3 challenge (seed `3994460340`, `whale_season`, Chop Zone) scored **313,836**, survived for 19:57.28, defeated all four bosses, and reached level 36. The winning settings were repeated with the same score and replay hash. These values do not include secrets.
 
 | Variable | Value |
 | --- | --- |
@@ -38,8 +38,8 @@ Use these values in the Telegram worker service’s **Railway Variables** tab to
 | `FIRE_RATE_AIRDROP` | `0.2` |
 | `FIRE_RATE_GREEN_CANDLE` | `0.2` |
 | `FINAL_BOSS_CHIP_START` | `1080` |
-| `FINAL_BOSS_ENGAGE_AT` | `1170` |
-| `FINAL_BOSS_LATEST_ENGAGE_AT` | `1184` |
+| `FINAL_BOSS_ENGAGE_AT` | `1180` |
+| `FINAL_BOSS_LATEST_ENGAGE_AT` | `1198` |
 | `FINAL_BOSS_HOLD_RANGE` | `850` |
 | `FINAL_BOSS_KILL_WINDOW` | `30` |
 | `FINAL_BOSS_INCOMING_FACTOR` | `0.8` |
@@ -51,13 +51,13 @@ Also set `TELEGRAM_BOT_TOKEN` to the bot’s BotFather token in Railway; it is a
 
 | Component | Points |
 | --- | ---: |
-| Time survived (1,186 full seconds × 10) | 11,860 |
-| Ordinary enemy kills | 251,390 |
+| Time survived (1,197 full seconds × 10) | 11,970 |
+| Ordinary enemy kills | 254,116 |
 | Boss kills (five-times XP value) | 22,750 |
 | Final-boss victory bonus | 25,000 |
-| **Total** | **311,000** |
+| **Total** | **313,836** |
 
-The run recorded 11,023 total kills, including four bosses, and first reached level 30 at 391.8 seconds. Its level-36 end build was Horns 5, Buyback 3, Airdrop 5, Dead Cat Bounce 3, Green Candle 1, and Diamond Hands 5; its passives were Conviction 2, Whale Gravity 1, DCA 3, Cold Wallet 2, Hedge 4, and Slippage 2. The milestone came from the stateful build planner plus a single early Whale Gravity pick and delaying the final-boss finish. The previous 197,675 baseline was 63,875 points lower (6,212 kills, level 37, four bosses, won at 13:38.2). Against the earlier 151,649 checkpoint, the verified result is +159,351 points and +5,381 kills, with four bosses rather than zero.
+The run recorded 11,130 total kills, including four bosses, and first reached level 30 at 391.8 seconds. Its level-36 end build was Horns 5, Buyback 3, Airdrop 5, Dead Cat Bounce 3, Green Candle 1, and Diamond Hands 5; its passives were Conviction 2, Whale Gravity 1, DCA 3, Cold Wallet 2, Hedge 4, and Slippage 2. The milestone came from the stateful build planner plus a single early Whale Gravity pick and delaying the final-boss finish. The previous 197,675 baseline was 116,161 points lower (6,212 kills, level 37, four bosses, won at 13:38.2). Against the earlier 151,649 checkpoint, the verified result is +162,187 points and +5,488 kills, with four bosses rather than zero. Timing perturbations at 19:38 and 19:42 both retained four bosses and scores above 313,000; delaying the trigger to 19:44 missed the market-close cutoff, so keep the latest-start safeguard at 19:58.
 
 ## Why these values are not in `railway.json`
 
