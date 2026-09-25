@@ -10,6 +10,7 @@ import { encodeMove } from './input-codes.js';
 
 export function createBot({ style = 'survive', phase = 0 } = {}) {
     let t = phase;
+    let xpRecovery = null;
     return {
         /** Move code for this tick. */
         move(sim) {
@@ -68,6 +69,23 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const len = Math.hypot(fx, fy);
                 return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
             }
+            const farmWindows = String(process.env.BOSS_FARM_WINDOWS || '').split(',').filter(Boolean).map((part) => part.split('-').map(Number));
+            const inBossWindow = !farmWindows.length || farmWindows.some(([start, end]) => sim.time >= start && sim.time < end);
+            const farmBoss = process.env.BOSS_FARM === '1' && inBossWindow && sim.enemies.find((e) => e.boss && !e.def.final && e.hp > 0);
+            const farmBossMinHp = Number(process.env.BOSS_FARM_MIN_HP || 0.72);
+            if (farmBoss && p.hp / Math.max(1, p.maxHp) >= farmBossMinHp) {
+                const dx = farmBoss.x - p.x;
+                const dy = farmBoss.y - p.y;
+                const d = Math.hypot(dx, dy) || 1;
+                const desired = Number(process.env.BOSS_FARM_RANGE || 150);
+                const radial = d - desired;
+                const tangent = ((t % 2) ? 1 : -1) * Number(process.env.BOSS_FARM_TANGENT || 0.45);
+                const pull = Number(process.env.BOSS_FARM_PULL || 0.02);
+                fx += (dx / d) * radial * pull - (dy / d) * tangent;
+                fy += (dy / d) * radial * pull + (dx / d) * tangent;
+                const len = Math.hypot(fx, fy);
+                return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+            }
             if (style === 'reckless') {
                 const e = nearest(sim.enemies, p);
                 if (e) {
@@ -79,8 +97,14 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 // and hoover up XP when the coast is clear.
                 const target = nearest(sim.enemies, p);
                 const dailyProfile = style === 'daily';
-                const threatRadius = dailyProfile ? Number(process.env.DAILY_THREAT_RADIUS || 70) : 48;
-                const projectileMultiplier = dailyProfile ? Number(process.env.DAILY_PROJECTILE_MULT || 4.5) : 1.5;
+                const pepeProfile = sim.characterId === 'pepe';
+                let threatRadius = dailyProfile ? Number(process.env.DAILY_THREAT_RADIUS || (pepeProfile ? 75 : 70)) : 48;
+                let projectileMultiplier = dailyProfile ? Number(process.env.DAILY_PROJECTILE_MULT || (pepeProfile ? 2 : 4.5)) : 1.5;
+                const lateStart = Number(process.env.LATE_SURVIVE_START || Infinity);
+                if (dailyProfile && sim.time >= lateStart) {
+                    threatRadius = Number(process.env.LATE_THREAT_RADIUS || threatRadius);
+                    projectileMultiplier = Number(process.env.LATE_PROJECTILE_MULT || projectileMultiplier);
+                }
                 let crowd = 0;
                 for (const e of sim.enemies) {
                     const dx = p.x - e.x;
@@ -108,7 +132,39 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const xpCrowdLimit = dailyProfile ? Number(process.env.DAILY_XP_CROWD_LIMIT || 0) : 3;
                 const orb = postDrop ? bestXpTarget(sim, p, xpTargetRange) : nearest(sim.xp, p, 420);
                 const projectileThreat = postDrop && sim.enemyProjectiles.some((b) => (b.x - p.x) ** 2 + (b.y - p.y) ** 2 < 135 * 135);
-                if (orb && (postDrop ? (crowd < xpCrowdLimit || orb.life < 8) && !projectileThreat : crowd < 3)) {
+                const decoyEnabled = dailyProfile && process.env.XP_DECOY !== '0';
+                const decoyCrowd = Number(process.env.XP_DECOY_CROWD || 5);
+                const decoyDuration = Number(process.env.XP_DECOY_SECONDS || 2.5) * 60;
+                const decoyGate = Number(process.env.XP_DECOY_MIN_HP || 0.55);
+                const returning = xpRecovery && t < xpRecovery.until;
+                if (decoyEnabled && orb && !projectileThreat && p.hp / Math.max(1, p.maxHp) >= decoyGate && crowd >= decoyCrowd && !returning) {
+                    let ax = 0;
+                    let ay = 0;
+                    for (const e of sim.enemies) {
+                        const dx = p.x - e.x;
+                        const dy = p.y - e.y;
+                        const d2 = dx * dx + dy * dy;
+                        if (d2 > 240 * 240) continue;
+                        const weight = 1 / (d2 + 80);
+                        ax += dx * weight;
+                        ay += dy * weight;
+                    }
+                    const al = Math.hypot(ax, ay);
+                    if (al > 1e-6) xpRecovery = { until: t + decoyDuration, x: ax / al, y: ay / al };
+                }
+                if (returning) {
+                    const urgency = orb ? 1 + Math.max(0, 8 - orb.life) / 8 : 1;
+                    fx += xpRecovery.x * Number(process.env.XP_DECOY_FORCE || 0.025);
+                    fy += xpRecovery.y * Number(process.env.XP_DECOY_FORCE || 0.025);
+                    if (orb && t + 1 >= xpRecovery.until) {
+                        const dx = orb.x - p.x;
+                        const dy = orb.y - p.y;
+                        const d = Math.hypot(dx, dy) || 1;
+                        const force = Number(process.env.XP_RETURN_FORCE || 0.045) * urgency;
+                        fx += (dx / d) * force;
+                        fy += (dy / d) * force;
+                    }
+                } else if (orb && (postDrop ? (crowd < xpCrowdLimit || orb.life < 8) && !projectileThreat : crowd < 3)) {
                     const dx = orb.x - p.x;
                     const dy = orb.y - p.y;
                     const d = Math.hypot(dx, dy) || 1;
@@ -125,8 +181,19 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                         fy += (dy / d) * 0.01;
                     }
                 }
+                const softBoss = process.env.BOSS_SOFT === '1' && inBossWindow && sim.enemies.find((e) => e.boss && !e.def.final && e.hp > 0);
+                if (softBoss && p.hp / Math.max(1, p.maxHp) >= Number(process.env.BOSS_SOFT_MIN_HP || 0.75)) {
+                    const dx = softBoss.x - p.x;
+                    const dy = softBoss.y - p.y;
+                    const d = Math.hypot(dx, dy) || 1;
+                    const desired = Number(process.env.BOSS_SOFT_RANGE || 180);
+                    const radial = d - desired;
+                    const pull = Number(process.env.BOSS_SOFT_PULL || 0.003);
+                    fx += (dx / d) * radial * pull;
+                    fy += (dy / d) * radial * pull;
+                }
                 // A little sideways drift so it circles instead of standing in one spot.
-                const drift = dailyProfile ? Number(process.env.DAILY_DRIFT || 0.0015) : 0.0015;
+                const drift = dailyProfile ? Number(process.env.DAILY_DRIFT || (pepeProfile ? 0.003 : 0.0015)) : 0.0015;
                 fx += Math.cos(t / 200) * drift;
                 fy += Math.sin(t / 200) * drift;
             }

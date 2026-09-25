@@ -103,14 +103,13 @@ export class Player {
         return Math.max(0.2, this._mult('cooldownMult'));
     }
     getSpeedMult() {
-        return this._mult('speedMult');
+        return this._mult('speedMult') * (this.characterSpeedMult || 1);
     }
     getExpMult() {
         return this._mult('expMult') * (this.twistExpMult || 1);
     }
     getMagnetRange() {
-        const magnetScale = Number(process.env.XP_MAGNET_MULT || 1.25);
-        return SIM.MAGNET_BASE * magnetScale * this._mult('magnetMult');
+        return SIM.MAGNET_BASE * this._mult('magnetMult');
     }
     getArmor() {
         return this._sum('armor');
@@ -158,7 +157,6 @@ export class Player {
         this.invincibleTimer = SIM.INVINCIBILITY;
         this.unhitTimer = 0;
         sim.stats.damageTaken += taken;
-        sim.stats.damageTakenBySource.contact = (sim.stats.damageTakenBySource.contact || 0) + taken;
         sim.emit({ t: 'hurt', x: this.x, y: this.y, v: taken });
         if (this.hp <= 0) {
             this.hp = 0;
@@ -478,7 +476,7 @@ export class XpOrb {
         this.x = x;
         this.y = y;
         this.value = value;
-        this.life = SIM.XP_LIFETIME * Number(process.env.XP_LIFETIME_MULT || 1);
+        this.life = SIM.XP_LIFETIME;
         this.speed = 0;
         this.dead = false;
     }
@@ -486,8 +484,6 @@ export class XpOrb {
         this.life -= dt;
         if (this.life <= 0) {
             this.dead = true;
-            sim.stats.xpExpired += this.value;
-            sim.recordXpExpiration(this);
             return;
         }
         const p = sim.player;
@@ -499,9 +495,7 @@ export class XpOrb {
             this.dead = true;
             return;
         }
-        const magnetStart = Number(process.env.XP_MAGNET_START || 300);
-        const magnetRange = sim.time >= magnetStart ? p.getMagnetRange() : SIM.MAGNET_BASE * p._mult('magnetMult');
-        if (d < magnetRange) {
+        if (d < p.getMagnetRange()) {
             this.speed = Math.min(this.speed + 600 * dt, 560);
             this.x += (dx / d) * this.speed * dt;
             this.y += (dy / d) * this.speed * dt;

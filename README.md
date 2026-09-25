@@ -1,8 +1,8 @@
 # Bearproof Survivor Bot
 
-This project targets the **Bearproof Build #2** action-survival game at <https://bearproof.app/b/2/>. It is not a Pepe Escobar or Street/Drug Lord market bot.
+This project targets the **Bearproof Build #3** action-survival game at <https://bearproof.app/>. It is not a Pepe Escobar or Street/Drug Lord market bot.
 
-The controller uses Bearproof's public deterministic simulation contract: one legal movement code per 60-Hz tick, a level-up card index whenever the simulation pauses for an upgrade, and a binary replay log suitable for the site's `/api/runs` verifier. The movement policy kites nearby bears, avoids enemy projectiles, collects XP when safe, and keeps drifting instead of standing still. The upgrade policy prioritizes evolved weapons, Buyback/Diamond Hands/Laser Eyes/Circuit Breaker damage, then Thick Skin/Hedge/Cold Wallet/DCA/Slippage survivability; it takes a heal card when health is low.
+The controller uses Build 3's deterministic simulation contract: one legal movement code per 60-Hz tick, a level-up card index whenever the simulation pauses for an upgrade, a character byte for Bull or Pepe, and a binary replay log suitable for the site's `/api/runs` verifier. Pepe starts with the character-exclusive Tongue Lash and 90 HP but moves 10% faster; the optimized daily controller prioritizes early durability, then evolved weapons, XP recovery, and projectile-safe kiting.
 
 ## Validation
 
@@ -13,9 +13,9 @@ npm run build
 npm run benchmark
 ```
 
-`DESIRED_SCORE` defaults to `300000`. The benchmark prints the final score, kills, level, bosses, end reason, selected weapons/passives, replay size, and deterministic state hash. A submission is only valid when the replay is produced from the same Bearproof build, seed, twist, and simulation version used by the challenge.
+`DESIRED_SCORE` defaults to `300000`. The benchmark prints the final score, kills, level, bosses, end reason, selected weapons/passives, replay size, and deterministic state hash. A submission is only valid when the replay is produced from the same Bearproof build, seed, twist, character, and simulation version used by the challenge.
 
-The current Build #2 daily challenge tested here is **Bear Trap / High Volatility**, seed `4144142827`. The tuned daily movement profile keeps a wider projectile-avoidance radius and retained a verified **161,718**-point simulation run that reached the 20-minute market close; the standard free-run controller’s best retained baseline was **104,354**. The live verified board at the time of testing had a top score of **166,051**, so this project does not claim that 200,000 or 300,000 is consistently reachable on this build. The controller is optimized for legal replay behavior and should be re-benchmarked whenever the daily seed, twist, or build changes.
+The current Build #3 daily challenge tested here is **Bear Trap / High Volatility**, seed `4144142827`. The best verified local run is Bull at **186,816** points, the full **72,000 ticks**, and **6,959 kills**. The winning policy uses late-game upgrade choices `27:1,28:2,29:2`, a two-stage enemy-dispersion/XP-recovery controller, and a final-window survival envelope beginning at 1,160 seconds. The replay re-simulates successfully with the same score and state hash. This is the best version found so far, but it remains below the 200,000 target; the controller should be re-benchmarked whenever the daily seed, twist, or build changes.
 
 ## Railway deployment
 

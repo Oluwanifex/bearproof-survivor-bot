@@ -4,11 +4,12 @@
  *
  * Binary layout (little-endian):
  *   0   'B' 'R'                magic
- *   2   u8   format version (2; version 1 had no twist byte)
+ *   2   u8   format version (3; version 1 had no twist byte, version 2 no character byte)
  *   3   u8   sim version (SIM_VERSION)
  *   4   u32  seed
  *   8   u8   twist (index into TWIST_IDS, 0 = none)
- *   9   u32  ticks simulated
+ *   9   u8   character (index into CHARACTER_IDS, 0 = the bull)
+ *   10  u32  ticks simulated
  *   13  runs of move codes:    u8 code, varint count   … until counts sum to `ticks`
  *   ..  varint pick count, then per pick: varint tick (delta from previous pick), u8 card index
  *
@@ -17,19 +18,20 @@
  */
 
 import { Simulation, SIM_VERSION } from './sim.js';
-import { SIM, TWIST_IDS } from './content.js';
+import { CHARACTER_IDS, SIM, TWIST_IDS } from './content.js';
 import { isValidCode } from './input-codes.js';
 
-export const RUNLOG_VERSION = 2;
+export const RUNLOG_VERSION = 3;
 // The normal build closes at 72,000 ticks. Challenge modes may explicitly
 // extend the simulation (for example MAX_TICKS=100800); replay validation
 // must accept the same honest limit that produced the log.
 const MAX_TICKS = Math.max(SIM.MAX_TICKS, Number(process.env.MAX_TICKS || SIM.MAX_TICKS));
 
 export class RunRecorder {
-    constructor(seed, twist = null) {
+    constructor(seed, twist = null, character = null) {
         this.seed = seed >>> 0;
         this.twist = Math.max(0, TWIST_IDS.indexOf(twist || 'none'));
+        this.character = Math.max(0, CHARACTER_IDS.indexOf(character || 'bull'));
         this.codes = [];
         this.counts = [];
         this.ticks = 0;
@@ -60,6 +62,7 @@ export class RunRecorder {
         out.u8(SIM_VERSION);
         out.u32(this.seed);
         out.u8(this.twist);
+        out.u8(this.character);
         out.u32(this.ticks);
         for (let i = 0; i < this.codes.length; i++) {
             out.u8(this.codes[i]);
@@ -77,20 +80,23 @@ export class RunRecorder {
 }
 
 /**
- * Parse bytes into `{ seed, twist, ticks, simVersion, runs: [[code, count]], picks: [[tick, idx]] }`.
+ * Parse bytes into `{ seed, twist, character, ticks, simVersion, runs: [[code, count]], picks: [[tick, idx]] }`.
  * Throws on malformed input.
  */
 export function decodeRunLog(bytes) {
     const r = new ByteReader(bytes);
     if (r.u8() !== 0x42 || r.u8() !== 0x52) throw new Error('bad magic');
     const version = r.u8();
-    if (version !== 1 && version !== RUNLOG_VERSION)
+    if (version < 1 || version > RUNLOG_VERSION)
         throw new Error(`unsupported log version ${version}`);
     const simVersion = r.u8();
     const seed = r.u32();
     const twistIndex = version >= 2 ? r.u8() : 0;
     if (twistIndex >= TWIST_IDS.length) throw new Error('unknown twist');
     const twist = TWIST_IDS[twistIndex];
+    const characterIndex = version >= 3 ? r.u8() : 0;
+    if (characterIndex >= CHARACTER_IDS.length) throw new Error('unknown character');
+    const character = CHARACTER_IDS[characterIndex];
     const ticks = r.u32();
     if (ticks > MAX_TICKS) throw new Error('too many ticks');
     const runs = [];
@@ -114,7 +120,7 @@ export function decodeRunLog(bytes) {
         picks.push([t, idx]);
     }
     if (!r.done()) throw new Error('trailing bytes');
-    return { seed, twist, ticks, simVersion, runs, picks };
+    return { seed, twist, character, ticks, simVersion, runs, picks };
 }
 
 /**
@@ -131,7 +137,12 @@ export function replay(bytes, { stage = null, onTick = null } = {}) {
     if (log.simVersion !== SIM_VERSION) {
         return { ok: false, error: `sim version ${log.simVersion} != ${SIM_VERSION}` };
     }
-    const sim = new Simulation({ seed: log.seed, stage, twist: log.twist });
+    const sim = new Simulation({
+        seed: log.seed,
+        stage,
+        twist: log.twist,
+        character: log.character
+    });
     let pi = 0;
     for (const [code, count] of log.runs) {
         for (let k = 0; k < count; k++) {
@@ -158,7 +169,8 @@ export function replay(bytes, { stage = null, onTick = null } = {}) {
         summary: sim.summary(),
         hash: sim.stateHash(),
         seed: log.seed,
-        twist: log.twist
+        twist: log.twist,
+        character: log.character
     };
 }
 
