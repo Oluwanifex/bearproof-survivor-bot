@@ -88,7 +88,7 @@ export class Simulation {
         this.won = false;
         this.endReason = null;
         this.stats = {
-            kills: 0, score: 0, bossKills: 0, damageTaken: 0, damageDealt: 0,
+            kills: 0, score: 0, bossKills: 0, normalKillScore: 0, bossKillScore: 0, damageTaken: 0, damageDealt: 0,
             damageByWeapon: Object.create(null), bossDamage: 0, bossDamageById: Object.create(null),
             xpSpawned: 0, xpCollected: 0, xpExpired: 0, damageTakenBySource: Object.create(null),
             rangeTicks: Object.create(null), scoreByMinute: Object.create(null), choices: []
@@ -258,7 +258,10 @@ export class Simulation {
     _onKilled(e, born) {
         if (!e.selfDestructed) {
             this.stats.kills++;
-            this.stats.score += e.boss ? e.exp * SIM.BOSS_SCORE_MULT : e.exp;
+            const killScore = e.boss ? e.exp * SIM.BOSS_SCORE_MULT : e.exp;
+            this.stats.score += killScore;
+            if (e.boss) this.stats.bossKillScore += killScore;
+            else this.stats.normalKillScore += killScore;
             this.xp.push(new XpOrb(e.x, e.y, e.exp));
         }
         this.emit({ t: 'kill', x: e.x, y: e.y, id: e.id, boss: e.boss, self: !!e.selfDestructed });
@@ -361,6 +364,11 @@ export class Simulation {
     damageEnemy(e, amount, crit, src, quiet = false) {
         const dealt = e.takeDamage(amount);
         this.stats.damageDealt += dealt;
+        if (src) this.stats.damageByWeapon[src] = (this.stats.damageByWeapon[src] || 0) + dealt;
+        if (e.boss) {
+            this.stats.bossDamage += dealt;
+            this.stats.bossDamageById[e.id] = (this.stats.bossDamageById[e.id] || 0) + dealt;
+        }
         if (!quiet) this.emit({ t: 'dmg', x: e.x, y: e.y - e.size, v: dealt, crit, src });
         return dealt;
     }
@@ -452,6 +460,12 @@ export class Simulation {
             ticks: this.tick,
             timeMs: this.timeMs,
             score: this.stats.score,
+            scoreBreakdown: {
+                survival: Math.floor(this.tick / SIM.TICK_RATE) * SIM.SCORE_PER_SECOND,
+                ordinaryKills: this.stats.normalKillScore,
+                bossKills: this.stats.bossKillScore,
+                finalBossWin: this.won ? SIM.WIN_BONUS : 0
+            },
             kills: this.stats.kills,
             level: this.player.level,
             bossKills: this.stats.bossKills,

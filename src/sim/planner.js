@@ -51,6 +51,14 @@ export class BuildPlanner {
         const current = sim.player.passives[card.id]?.count || 0;
         let score = passiveMarginal(card.id, sim);
         score += current * 3;
+        if (card.id === 'whale_gravity') {
+            const pickupRangeCap = Math.max(0, Number(process.env.PICKUP_RANGE_CAP || 0));
+            if (pickupRangeCap > 0) {
+                const until = Number(process.env.PICKUP_RANGE_UNTIL || 360);
+                if (current < pickupRangeCap && sim.time < until) score += Number(process.env.PICKUP_RANGE_BONUS || 45);
+                else score -= Number(process.env.PICKUP_RANGE_EXCESS_PENALTY || 1000);
+            }
+        }
         if (this.phase === 'opening' && SURVIVAL_PASSIVES.has(card.id)) score += 25;
         if (this.phase === 'boss' && DAMAGE_PASSIVES.has(card.id)) score += 60;
         if (SURVIVAL_PASSIVES.has(card.id)) score += hpRatio < 0.82 ? 70 : 28;

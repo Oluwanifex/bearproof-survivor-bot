@@ -14,6 +14,11 @@ if (!Number.isInteger(daily.seed) || !daily.twist?.id || !daily.date || !daily.b
 const tunedDefaults = {
   CHARACTER: 'bull',
   CHOICE_OVERRIDE: '27:2,28:1,29:0',
+  USE_PLANNER: '1',
+  PICKUP_RANGE_CAP: '1',
+  PICKUP_RANGE_BONUS: '150',
+  PICKUP_RANGE_EXCESS_PENALTY: '1000',
+  PICKUP_RANGE_UNTIL: '360',
   XP_DECOY: '1',
   XP_DECOY_CROWD: '2',
   XP_DECOY_SECONDS: '3',
@@ -36,6 +41,13 @@ const tunedDefaults = {
   FIRE_RATE_DEAD_CAT_BOUNCE: '0.2',
   FIRE_RATE_AIRDROP: '0.2',
   FIRE_RATE_GREEN_CANDLE: '0.2',
+  FINAL_BOSS_CHIP_START: '1080',
+  FINAL_BOSS_ENGAGE_AT: '1170',
+  FINAL_BOSS_LATEST_ENGAGE_AT: '1184',
+  FINAL_BOSS_HOLD_RANGE: '850',
+  FINAL_BOSS_KILL_WINDOW: '30',
+  FINAL_BOSS_INCOMING_FACTOR: '0.8',
+  FINAL_BOSS_DPS_FACTOR: '0.55',
 };
 for (const [name, value] of Object.entries(tunedDefaults)) {
   process.env[name] ??= value;

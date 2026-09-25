@@ -102,7 +102,16 @@ export function chooseUpgrade(sim) {
       score = (PASSIVE_VALUE[card.id] || 50) + current * 5;
       if (hpRatio < 0.6 && ['thick_skin', 'hedge', 'cold_wallet', 'dca', 'slippage'].includes(card.id)) score += 25;
       if (card.id === 'whale_gravity' && sim.stats.xpSpawned > 0) {
-        const expiredRatio = sim.stats.xpExpired / Math.max(1, sim.stats.xpSpawned);
+        const pickupRangeCap = Math.max(0, Number(process.env.PICKUP_RANGE_CAP || 0));
+        const currentCount = sim.player.passives.whale_gravity?.count || 0;
+        const pickupRangeUntil = Number(process.env.PICKUP_RANGE_UNTIL || 360);
+        if (pickupRangeCap > 0) {
+          if (currentCount < pickupRangeCap && sim.time < pickupRangeUntil) {
+            score += Number(process.env.PICKUP_RANGE_BONUS || 45);
+          } else {
+            score -= Number(process.env.PICKUP_RANGE_EXCESS_PENALTY || 1000);
+          }
+        }
       }
       if (card.id === 'compounding' && sim.stats.xpExpired > sim.stats.xpCollected) score += 22;
       if (defenseBias > 0 && card.kind === 'passive') {

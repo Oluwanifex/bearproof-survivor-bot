@@ -21,6 +21,65 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
             const finalBoss = sim.enemies.find((e) => e.boss && e.def.final && e.hp > 0);
             const bossBudgetFactor = Number(process.env.BOSS_BUDGET_FACTOR || 0.65);
             const bossBudget = p.maxHp * bossBudgetFactor + p.getDamageReduction() * p.maxHp;
+            const finalBossEngageAt = Number(process.env.FINAL_BOSS_ENGAGE_AT || 0);
+            const delayedBossMode = finalBossEngageAt > 0;
+            const chipStartAt = Number(process.env.FINAL_BOSS_CHIP_START || Math.max(0, finalBossEngageAt - 70));
+            const latestEngageAt = Number(process.env.FINAL_BOSS_LATEST_ENGAGE_AT || 1170);
+            const averageRunDps = sim.stats.damageDealt / Math.max(60, sim.time);
+            const estimatedBossDps = averageRunDps * Number(process.env.FINAL_BOSS_DPS_FACTOR || 0.55);
+            const killWindowSeconds = Number(process.env.FINAL_BOSS_KILL_WINDOW || 30);
+            const chipThreshold = finalBoss
+                ? Math.min(finalBoss.maxHp - 1, Math.max(Number(process.env.FINAL_BOSS_MIN_REMAINING_HP || 800), estimatedBossDps * killWindowSeconds))
+                : 0;
+            const chippedBossHold = !!finalBoss && delayedBossMode
+                && sim.time >= chipStartAt && sim.time < finalBossEngageAt
+                && finalBoss.hp <= chipThreshold;
+            const safeBossBudget = finalBoss && finalBossDamageBudget(sim, finalBoss);
+            const chipAttack = !!finalBoss && delayedBossMode && sim.time >= chipStartAt
+                && sim.time < finalBossEngageAt && !chippedBossHold && p.hp > bossBudget;
+            const scheduledBossAttack = !!finalBoss && delayedBossMode && sim.time >= finalBossEngageAt
+                && (safeBossBudget || sim.time >= latestEngageAt);
+            const holdBossForLater = !!finalBoss && delayedBossMode && (
+                sim.time < chipStartAt || chippedBossHold
+                || (sim.time >= finalBossEngageAt && !scheduledBossAttack)
+            );
+            if (holdBossForLater) {
+                const dx = finalBoss.x - p.x;
+                const dy = finalBoss.y - p.y;
+                const d = Math.hypot(dx, dy) || 1;
+                const holdRange = Math.max(
+                    Number(process.env.FINAL_BOSS_HOLD_RANGE || 700),
+                    effectiveBossRange(sim) + finalBoss.size + 100
+                );
+                const radial = (d - holdRange) * Number(process.env.FINAL_BOSS_HOLD_PULL || 0.1);
+                const tangent = ((t % 2) ? 1 : -1) * Number(process.env.FINAL_BOSS_HOLD_TANGENT || 0.18);
+                fx += (dx / d) * radial - (dy / d) * tangent;
+                fy += (dy / d) * radial + (dx / d) * tangent;
+                const threatRadius = Number(process.env.DAILY_THREAT_RADIUS || 70);
+                for (const e of sim.enemies) {
+                    if (e === finalBoss) continue;
+                    const ex = p.x - e.x;
+                    const ey = p.y - e.y;
+                    const d2 = ex * ex + ey * ey;
+                    const keep = (e.boss ? 150 : threatRadius) + e.size;
+                    if (d2 > keep * keep) continue;
+                    const w = (e.boss ? 3 : 1) / (d2 + 40);
+                    fx += ex * w;
+                    fy += ey * w;
+                }
+                const projectileMultiplier = Number(process.env.DAILY_PROJECTILE_MULT || 4.5);
+                for (const b of sim.enemyProjectiles) {
+                    const bx = p.x - b.x;
+                    const by = p.y - b.y;
+                    const d2 = bx * bx + by * by;
+                    if (d2 < 110 * 110) {
+                        fx += (bx * projectileMultiplier) / (d2 + 30);
+                        fy += (by * projectileMultiplier) / (d2 + 30);
+                    }
+                }
+                const len = Math.hypot(fx, fy);
+                return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+            }
             if (sim.won && process.env.FARM_AFTER_WIN === '1') {
                 const farmEnemyWeight = Number(process.env.FARM_ENEMY_WEIGHT || 4);
                 const farmBossWeight = Number(process.env.FARM_BOSS_WEIGHT || 5);
@@ -48,7 +107,7 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const len = Math.hypot(fx, fy);
                 return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
             }
-            if (finalBoss && p.hp > bossBudget) {
+            if (finalBoss && (delayedBossMode ? chipAttack || scheduledBossAttack : p.hp > bossBudget)) {
                 const dx = finalBoss.x - p.x;
                 const dy = finalBoss.y - p.y;
                 const d = Math.hypot(dx, dy) || 1;
@@ -258,4 +317,17 @@ function bestXpTarget(sim, p, maxD) {
 function effectiveBossRange(sim) {
     const ranges = sim.player.weapons.map((w) => w.getRange(sim.player));
     return ranges.length ? Math.max(...ranges) * 0.72 : 150;
+}
+
+/** Engage the final boss only when the measured run DPS and current health budget support a safe finish. */
+function finalBossDamageBudget(sim, boss) {
+    const measuredDps = sim.stats.damageDealt / Math.max(60, sim.time);
+    const bossDpsFactor = Number(process.env.FINAL_BOSS_DPS_FACTOR || 0.55);
+    const estimatedFightSeconds = boss.hp / Math.max(1, measuredDps * bossDpsFactor);
+    const incomingDps = sim.stats.damageTaken / Math.max(60, sim.time);
+    const safetyFactor = Number(process.env.FINAL_BOSS_INCOMING_FACTOR || 1.5);
+    const regen = sim.player._sum('hpRegen');
+    const effectiveHp = sim.player.hp + sim.player.getDamageReduction() * sim.player.maxHp + regen * estimatedFightSeconds;
+    const projectedIncoming = incomingDps * safetyFactor * estimatedFightSeconds;
+    return effectiveHp >= projectedIncoming * 1.15;
 }

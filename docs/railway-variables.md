@@ -1,8 +1,8 @@
 # Railway Variables for the Bearproof Daily Bot
 
-## Tested daily policy
+## Verified Build 3 daily policy
 
-Use the following values in the Telegram worker service’s **Railway Variables** tab. These values were benchmarked on 2026-09-25’s Build 3 challenge (seed `3994460340`, `whale_season`, Chop Zone). They do not contain secrets.
+Use these values in the Telegram worker service’s **Railway Variables** tab to reproduce the tested policy. The best full replay on 2026-09-25’s Build 3 challenge (seed `3994460340`, `whale_season`, Chop Zone) scored **311,000**, survived for 19:46.75, defeated all four bosses, and reached level 36. The same settings reproduced the same score and replay hash twice. These values do not include secrets.
 
 | Variable | Value |
 | --- | --- |
@@ -10,6 +10,11 @@ Use the following values in the Telegram worker service’s **Railway Variables*
 | `BEARPROOF_BUILD` | `3` |
 | `CHARACTER` | `bull` |
 | `CHOICE_OVERRIDE` | `27:2,28:1,29:0` |
+| `USE_PLANNER` | `1` |
+| `PICKUP_RANGE_CAP` | `1` |
+| `PICKUP_RANGE_BONUS` | `150` |
+| `PICKUP_RANGE_EXCESS_PENALTY` | `1000` |
+| `PICKUP_RANGE_UNTIL` | `360` |
 | `XP_DECOY` | `1` |
 | `XP_DECOY_CROWD` | `2` |
 | `XP_DECOY_SECONDS` | `3` |
@@ -32,8 +37,27 @@ Use the following values in the Telegram worker service’s **Railway Variables*
 | `FIRE_RATE_DEAD_CAT_BOUNCE` | `0.2` |
 | `FIRE_RATE_AIRDROP` | `0.2` |
 | `FIRE_RATE_GREEN_CANDLE` | `0.2` |
+| `FINAL_BOSS_CHIP_START` | `1080` |
+| `FINAL_BOSS_ENGAGE_AT` | `1170` |
+| `FINAL_BOSS_LATEST_ENGAGE_AT` | `1184` |
+| `FINAL_BOSS_HOLD_RANGE` | `850` |
+| `FINAL_BOSS_KILL_WINDOW` | `30` |
+| `FINAL_BOSS_INCOMING_FACTOR` | `0.8` |
+| `FINAL_BOSS_DPS_FACTOR` | `0.55` |
 
-Also set `TELEGRAM_BOT_TOKEN` to the bot’s BotFather token in Railway; it is a secret and must never be committed. The tuned-policy values above should be copied exactly when matching the benchmark. The challenge seed/twist rotate; `run-today.mjs` fetches the active values dynamically rather than pinning the dated seed.
+Also set `TELEGRAM_BOT_TOKEN` to the bot’s BotFather token in Railway; it is a secret and must never be committed. The tested environment is date/seed-specific: the challenge seed and twist rotate. `run-today.mjs` fetches the active values dynamically, but the 311,000 score is verified only for this dated Build 3 challenge.
+
+### Verified score breakdown
+
+| Component | Points |
+| --- | ---: |
+| Time survived (1,186 full seconds × 10) | 11,860 |
+| Ordinary enemy kills | 251,390 |
+| Boss kills (five-times XP value) | 22,750 |
+| Final-boss victory bonus | 25,000 |
+| **Total** | **311,000** |
+
+The run recorded 11,023 total kills, including four bosses, and first reached level 30 at 391.8 seconds. Its level-36 end build was Horns 5, Buyback 3, Airdrop 5, Dead Cat Bounce 3, Green Candle 1, and Diamond Hands 5; its passives were Conviction 2, Whale Gravity 1, DCA 3, Cold Wallet 2, Hedge 4, and Slippage 2. The milestone came from the stateful build planner plus a single early Whale Gravity pick and delaying the final-boss finish. The previous 197,675 baseline was 63,875 points lower (6,212 kills, level 37, four bosses, won at 13:38.2). Against the earlier 151,649 checkpoint, the verified result is +159,351 points and +5,381 kills, with four bosses rather than zero.
 
 ## Why these values are not in `railway.json`
 
@@ -49,6 +73,10 @@ The table below inventories the `process.env` tunables read by `run-bot.mjs`, `s
 | `CHOICE_OVERRIDE` | empty | Optional comma-separated `level:index` upgrade picks. |
 | `DESIRED_SCORE` | `300000` | Local CLI benchmark status threshold. |
 | `USE_PLANNER` | disabled | Enables planner upgrade choices only when `1`. |
+| `PICKUP_RANGE_CAP` | `0` (no cap bonus) | Maximum Whale Gravity stacks receiving the early-priority bonus. |
+| `PICKUP_RANGE_BONUS` | `45` | One-time planner/selector bonus while under the pickup cap. |
+| `PICKUP_RANGE_EXCESS_PENALTY` | `1000` | Deprioritizes extra Whale Gravity stacks after the cap/window. |
+| `PICKUP_RANGE_UNTIL` | `360` seconds | End of the early Whale Gravity preference window. |
 | `ATTACK_BIAS` | `0` | Adds attack preference to selected late upgrade choices. |
 | `ATTACK_BIAS_START` | `600` seconds | Start time for attack preference. |
 | `ATTACK_BIAS_MIN_HP` | `0.62` | Minimum health ratio for attack preference. |
@@ -90,6 +118,14 @@ The table below inventories the `process.env` tunables read by `run-bot.mjs`, `s
 | `BOSS_SOFT_MIN_HP` | `0.75` | Health ratio gate for soft-boss steering. |
 | `BOSS_SOFT_RANGE` | `180` | Desired soft-boss distance. |
 | `BOSS_SOFT_PULL` | `0.003` | Soft-boss radial steering. |
+| `FINAL_BOSS_CHIP_START` | `FINAL_BOSS_ENGAGE_AT - 70` | Start attacking the final boss during the chip window. |
+| `FINAL_BOSS_ENGAGE_AT` | `0` (disabled) | Time, in seconds, when the bot resumes final-boss engagement. |
+| `FINAL_BOSS_LATEST_ENGAGE_AT` | `1170` seconds | Latest time to override the safety gate and commit to the final fight. |
+| `FINAL_BOSS_HOLD_RANGE` | `700` | Desired distance while holding the boss outside weapon range. |
+| `FINAL_BOSS_KILL_WINDOW` | `30` seconds | Remaining boss HP budget, estimated from observed run DPS. |
+| `FINAL_BOSS_MIN_REMAINING_HP` | `800` | Floor on the chip-and-hold HP threshold. |
+| `FINAL_BOSS_DPS_FACTOR` | `0.55` | Conservative fraction of run DPS used for final-boss estimates. |
+| `FINAL_BOSS_INCOMING_FACTOR` | `1.5` | Multiplier applied to observed incoming damage in the fight-safety estimate. |
 | `FARM_AFTER_WIN` | disabled unless `1` | Enables post-win farming movement. |
 | `FARM_ENEMY_WEIGHT` | `4` | Post-win normal-enemy steering weight. |
 | `FARM_BOSS_WEIGHT` | `5` | Post-win boss steering weight. |
