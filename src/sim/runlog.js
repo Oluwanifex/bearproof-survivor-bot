@@ -22,10 +22,8 @@ import { CHARACTER_IDS, SIM, TWIST_IDS } from './content.js';
 import { isValidCode } from './input-codes.js';
 
 export const RUNLOG_VERSION = 3;
-// The normal build closes at 72,000 ticks. Challenge modes may explicitly
-// extend the simulation (for example MAX_TICKS=100800); replay validation
-// must accept the same honest limit that produced the log.
-const MAX_TICKS = Math.max(SIM.MAX_TICKS, Number(process.env.MAX_TICKS || SIM.MAX_TICKS));
+// Replay decoding must respect the build's immutable standard challenge cap.
+const MAX_TICKS = SIM.MAX_TICKS;
 
 export class RunRecorder {
     constructor(seed, twist = null, character = null) {

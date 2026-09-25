@@ -80,33 +80,6 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const len = Math.hypot(fx, fy);
                 return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
             }
-            if (sim.won && process.env.FARM_AFTER_WIN === '1') {
-                const farmEnemyWeight = Number(process.env.FARM_ENEMY_WEIGHT || 4);
-                const farmBossWeight = Number(process.env.FARM_BOSS_WEIGHT || 5);
-                const farmProjectileWeight = Number(process.env.FARM_PROJECTILE_WEIGHT || 5);
-                for (const e of sim.enemies) {
-                    const dx = p.x - e.x;
-                    const dy = p.y - e.y;
-                    const d2 = dx * dx + dy * dy;
-                    if (d2 > 260 * 260) continue;
-                    const w = (e.boss ? farmBossWeight : farmEnemyWeight) / (d2 + 80);
-                    fx += dx * w;
-                    fy += dy * w;
-                }
-                for (const b of sim.enemyProjectiles) {
-                    const dx = p.x - b.x;
-                    const dy = p.y - b.y;
-                    const d2 = dx * dx + dy * dy;
-                    if (d2 < 180 * 180) {
-                        fx += dx * farmProjectileWeight / (d2 + 30);
-                        fy += dy * farmProjectileWeight / (d2 + 30);
-                    }
-                }
-                fx += Math.cos(t / 160) * 0.002;
-                fy += Math.sin(t / 160) * 0.002;
-                const len = Math.hypot(fx, fy);
-                return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
-            }
             if (finalBoss && (delayedBossMode ? chipAttack || scheduledBossAttack : p.hp > bossBudget)) {
                 const dx = finalBoss.x - p.x;
                 const dy = finalBoss.y - p.y;

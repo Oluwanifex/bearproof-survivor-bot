@@ -5,18 +5,6 @@ import { advanceInteractiveRun, chooseUpgrade, createInteractiveRun, upgradeDesc
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
 const BUILD = Number(process.env.BEARPROOF_BUILD || 3);
-// The hackathon evaluates the extended run by default. Set TELEGRAM_EXTENDED_TEST=0
-// only when a normal 72,000-tick run is explicitly needed for local comparison.
-const EXTENDED_TEST = process.env.TELEGRAM_EXTENDED_TEST !== '0';
-if (EXTENDED_TEST) {
-  // The hackathon farming mode intentionally runs beyond the normal verifier
-  // window. Keep the mode enabled, but still submit its replay to /api/runs.
-  process.env.MAX_TICKS = process.env.MAX_TICKS || '100800';
-  process.env.FARM_AFTER_WIN = '1';
-  process.env.FARM_ENEMY_WEIGHT = process.env.FARM_ENEMY_WEIGHT || '4';
-  process.env.FARM_BOSS_WEIGHT = process.env.FARM_BOSS_WEIGHT || '5';
-  process.env.FARM_PROJECTILE_WEIGHT = process.env.FARM_PROJECTILE_WEIGHT || '7';
-}
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is required');
 const bot = new Telegraf(token);
@@ -91,8 +79,7 @@ async function submitFinished(ctx, session, result) {
     durationMs: summary.timeMs,
     log: Buffer.from(result.log).toString('base64url')
   }) });
-  const modeLabel = EXTENDED_TEST ? 'Extended farming run' : 'Run';
-  await ctx.reply(`${modeLabel} submitted: ${summary.score.toLocaleString()} score, ${summary.kills.toLocaleString()} kills, level ${summary.level}, ${summary.reason}.\n${response.rank ? `Board rank: #${response.rank}` : 'Verification pending.'}`);
+  await ctx.reply(`Run submitted: ${summary.score.toLocaleString()} score, ${summary.kills.toLocaleString()} kills, level ${summary.level}, ${summary.reason}.\n${response.rank ? `Board rank: #${response.rank}` : 'Verification pending.'}`);
 }
 
 async function continueRun(ctx, session, choice = null) {
@@ -132,7 +119,7 @@ bot.command('play', async (ctx) => {
     await api('/api/player', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, name }) });
     await api('/api/payout-address', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, address: payout }) });
     session.run = createInteractiveRun(challenge.seed, { mode: 'daily', twist: challenge.twist?.id, style: 'daily', phase: -1 });
-    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name} in ${auto ? 'automatic high-score' : 'manual upgrade'} mode${EXTENDED_TEST ? ' [EXTENDED FARMING — WILL SUBMIT]' : ''}.`);
+    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name} in ${auto ? 'automatic high-score' : 'manual upgrade'} mode [72,000-tick standard cap].`);
     await continueRun(ctx, session);
   } catch (error) {
     console.error(error);

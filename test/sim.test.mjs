@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { SIM } from '../src/sim/content.js';
+import { decodeRunLog } from '../src/sim/runlog.js';
 import { Simulation } from '../src/sim/sim.js';
 import { BuildPlanner, marginalWeaponDps } from '../src/sim/planner.js';
 
@@ -34,4 +36,12 @@ test('planner evaluates weapon-specific marginal DPS and reserves slots', () => 
   const card = { kind: 'weapon', id: 'laser_eyes', isNew: true, level: 1 };
   assert.ok(marginalWeaponDps(card, sim) > 0);
   assert.ok(planner.reservedWeapons.length > 0);
+});
+
+test('replay decoder enforces the immutable 72,000-tick build cap', () => {
+  assert.equal(SIM.MAX_TICKS, 72_000);
+  const header = new Uint8Array(14);
+  header.set([0x42, 0x52, 3, 2], 0);
+  new DataView(header.buffer).setUint32(10, 72_001, true);
+  assert.throws(() => decodeRunLog(header), /too many ticks/);
 });

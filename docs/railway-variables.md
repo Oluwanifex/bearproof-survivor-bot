@@ -126,10 +126,6 @@ The table below inventories the `process.env` tunables read by `run-bot.mjs`, `s
 | `FINAL_BOSS_MIN_REMAINING_HP` | `800` | Floor on the chip-and-hold HP threshold. |
 | `FINAL_BOSS_DPS_FACTOR` | `0.55` | Conservative fraction of run DPS used for final-boss estimates. |
 | `FINAL_BOSS_INCOMING_FACTOR` | `1.5` | Multiplier applied to observed incoming damage in the fight-safety estimate. |
-| `FARM_AFTER_WIN` | disabled unless `1` | Enables post-win farming movement. |
-| `FARM_ENEMY_WEIGHT` | `4` | Post-win normal-enemy steering weight. |
-| `FARM_BOSS_WEIGHT` | `5` | Post-win boss steering weight. |
-| `FARM_PROJECTILE_WEIGHT` | `5` | Post-win projectile-avoidance weight. |
 | `WEAPON_COOLDOWN_MULT` | `1` | Global weapon cooldown multiplier; smaller values increase fire rate. |
 | `WEAPON_SPREAD_MULT` | `1` | Default spread multiplier for weapons with multi-shot attacks. |
 | `FIRE_RATE_<WEAPON_ID>` | `1` per weapon | Optional per-weapon cooldown multiplier, applied with the global multiplier. |
