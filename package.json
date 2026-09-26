@@ -12,8 +12,9 @@
     "test": "node --test",
     "benchmark": "node run-bot.mjs",
     "today": "node run-today.mjs",
+    "tune:build4": "node scripts/tune-build4.mjs",
     "profile:daily": "node scripts/profile-daily-policy.mjs",
-    "lint": "node --check run-bot.mjs && node --check run-today.mjs && node --check scripts/profile-daily-policy.mjs && node --check scripts/export-telemetry.mjs && node --check src/telegram.mjs && node --check src/sim/bot.js && node --check src/sim/sim.js && node --check src/sim/planner.js",
+    "lint": "node --check run-bot.mjs && node --check run-today.mjs && node --check scripts/tune-build4.mjs && node --check scripts/profile-daily-policy.mjs && node --check scripts/export-telemetry.mjs && node --check src/telegram.mjs && node --check src/sim/bot.js && node --check src/sim/sim.js && node --check src/sim/planner.js",
     "build": "npm run lint && npm test"
   },
   "dependencies": {

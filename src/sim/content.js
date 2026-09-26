@@ -16,7 +16,14 @@ export const SIM = Object.freeze({
     PLAYER_SIZE: 18,
     PLAYER_HP: 100,
     MAX_ENEMIES: 300,
-    SPAWN_RADIUS: 900,
+    // Bears spawn just past the edge of the view (~1100x720 on a desktop, ~520x1100 on a phone), so the
+    // first ones are on screen within seconds; at 900 the first bear took ~7 s to show up and ~11 s to arrive.
+    SPAWN_RADIUS: 700,
+    BOSS_SPAWN_RADIUS: 720,
+    // The opening bell: at 0.5 s a ring of the first wave's bears closes in from just off screen.
+    OPENING_TICK: 30,
+    OPENING_RING: 6,
+    OPENING_RADIUS: 580,
     DESPAWN_RADIUS: 1250,
     XP_LIFETIME: 30,
     INVINCIBILITY: 0.5,
@@ -28,8 +35,49 @@ export const SIM = Object.freeze({
     PASSIVE_MAX_STACK: 5,
     SCORE_PER_SECOND: 10,
     BOSS_SCORE_MULT: 5,
-    WIN_BONUS: 25000
+    WIN_BONUS: 25000,
+    // Airdrop crates: the first at 0:40, then one a minute. Each lands on screen (inside ~260 px of the bull,
+    // the half-width of a phone's view), floats down, then waits a while before the bears loot it.
+    CRATE_FIRST: 40,
+    CRATE_EVERY: 60,
+    CRATE_DIST_MIN: 170,
+    CRATE_DIST_MAX: 240,
+    CRATE_FALL: 2,
+    CRATE_LIFE: 25,
+    CRATE_PICKUP: 30
 });
+
+// ---------------------------------------------------------------- airdrop crates
+
+/**
+ * What an airdrop crate holds. A crate's loot is rolled when it drops, never the same as the one before.
+ * `duration` is in seconds; `cooldownMult` scales every weapon's cooldown while the printer runs.
+ */
+export const CRATE_LOOT_IDS = ['magnet', 'shield', 'printer'];
+
+export const CRATE_LOOT = {
+    magnet: {
+        id: 'magnet',
+        name: 'Magnet',
+        toast: 'MAGNET: EVERY CANDLE IS YOURS',
+        description: 'Every candle on the chart flies to you.'
+    },
+    shield: {
+        id: 'shield',
+        name: 'Shield',
+        toast: 'SHIELD: 8 S UNREKTABLE',
+        description: '8 s of no damage.',
+        duration: 8
+    },
+    printer: {
+        id: 'printer',
+        name: 'Money Printer',
+        toast: 'MONEY PRINTER GO BRRR',
+        description: '10 s of weapons firing twice as fast.',
+        duration: 10,
+        cooldownMult: 0.5
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Weapons. Scaling is uniform: damage +20%/level, cooldown x0.92/level, range +10%/level.
@@ -788,6 +836,7 @@ export const CHARACTERS = {
         name: 'The Bull',
         sprite: 'bull',
         tagline: 'You are a bull. The bear market is endless.',
+        emoji: '🐂',
         description: 'Horns · 100 HP',
         starterWeapon: STARTER_WEAPON
     },
@@ -796,6 +845,7 @@ export const CHARACTERS = {
         name: 'Pepe',
         sprite: 'pepe',
         tagline: 'You are a frog. The bear market is endless. Comfy.',
+        emoji: '🐸',
         description: 'Tongue · 90 HP · fast',
         starterWeapon: 'tongue',
         maxHp: 90,

@@ -162,6 +162,7 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const postDrop = process.env.XP_POST_DROP !== '0' && sim.time >= postDropStart;
                 const xpTargetRange = dailyProfile ? Number(process.env.DAILY_XP_TARGET_RANGE || 300) : 420;
                 const xpCrowdLimit = dailyProfile ? Number(process.env.DAILY_XP_CROWD_LIMIT || 0) : 3;
+                const crate = nearest(sim.crates || [], p, 520);
                 const orb = postDrop ? bestXpTarget(sim, p, xpTargetRange) : nearest(sim.xp, p, 420);
                 const projectileThreat = postDrop && sim.enemyProjectiles.some((b) => (b.x - p.x) ** 2 + (b.y - p.y) ** 2 < 135 * 135);
                 const decoyEnabled = dailyProfile && process.env.XP_DECOY !== '0';
@@ -196,6 +197,12 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                         fx += (dx / d) * force;
                         fy += (dy / d) * force;
                     }
+                } else if (crate && crowd < 2) {
+                    const dx = crate.x - p.x;
+                    const dy = crate.y - p.y;
+                    const d = Math.hypot(dx, dy) || 1;
+                    fx += (dx / d) * Number(process.env.CRATE_ATTRACTION || 0.02);
+                    fy += (dy / d) * Number(process.env.CRATE_ATTRACTION || 0.02);
                 } else if (orb && (postDrop ? (crowd < xpCrowdLimit || orb.life < 8) && !projectileThreat : crowd < 3)) {
                     const dx = orb.x - p.x;
                     const dy = orb.y - p.y;

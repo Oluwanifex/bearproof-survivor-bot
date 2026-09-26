@@ -16,6 +16,8 @@
  */
 
 import {
+    CRATE_LOOT,
+    CRATE_LOOT_IDS,
     PASSIVES,
     SIM,
     STARTER_WEAPON,
@@ -31,14 +33,14 @@ import {
     characterDef
 } from './content.js';
 import { cos, hypot, sin } from './dmath.js';
-import { Enemy, Player, XpOrb, resetEntityIds } from './entities.js';
+import { Enemy, Player, SupplyCrate, XpOrb, resetEntityIds } from './entities.js';
 import { MOVE_TABLE, isValidCode } from './input-codes.js';
 import { Rng } from './rng.js';
 import { SpatialHash } from './spatial.js';
 import { Weapon } from './weapons.js';
 
-/** Bump when a change alters simulation results for the same inputs. 2: daily twists. */
-export const SIM_VERSION = 2;
+/** Build 4 sim v4: closer spawns/opening ring (v3) and scheduled supply crates (v4). */
+export const SIM_VERSION = 4;
 
 export class Simulation {
     constructor({ seed = 1, stage = null, twist = null, character = null } = {}) {
@@ -73,6 +75,9 @@ export class Simulation {
         this.enemyProjectiles = [];
         this.mines = [];
         this.xp = [];
+        this.crates = [];
+        this.nextCrateAt = SIM.CRATE_FIRST;
+        this.lastLoot = null;
         this.delayed = [];
         this.spatial = new SpatialHash(64);
 
@@ -91,7 +96,7 @@ export class Simulation {
             kills: 0, score: 0, bossKills: 0, normalKillScore: 0, bossKillScore: 0, damageTaken: 0, damageDealt: 0,
             damageByWeapon: Object.create(null), bossDamage: 0, bossDamageById: Object.create(null),
             xpSpawned: 0, xpCollected: 0, xpExpired: 0, damageTakenBySource: Object.create(null),
-            rangeTicks: Object.create(null), scoreByMinute: Object.create(null), choices: []
+            rangeTicks: Object.create(null), scoreByMinute: Object.create(null), choices: [], crates: 0
         };
         this.events = [];
     }
@@ -139,6 +144,8 @@ export class Simulation {
         this._runDelayed(dt);
         this._cullDead();
         this._updateList(this.xp, dt);
+        this._updateList(this.crates, dt);
+        this._dropCrate();
         this._spawn(dt);
         if (p.dead) return this._end('liquidated');
 
@@ -291,6 +298,18 @@ export class Simulation {
 
     _spawn(dt) {
         const wave = this.wave;
+        if (this.tick === SIM.OPENING_TICK) {
+            const a0 = this.rng.angle();
+            for (let i = 0; i < SIM.OPENING_RING; i++) {
+                const a = a0 + (i * 2 * Math.PI) / SIM.OPENING_RING;
+                const id = pickWeighted(wave.pool, this.stageId, () => this.rng.next());
+                this.enemies.push(new Enemy(
+                    this.player.x + cos(a) * SIM.OPENING_RADIUS,
+                    this.player.y + sin(a) * SIM.OPENING_RADIUS,
+                    enemyDef(id), this.hpMult, this.enemyDmgMult, this
+                ));
+            }
+        }
         const max = Math.min(SIM.MAX_ENEMIES, 20 + Math.floor(this.time / 10));
         const interval =
             Math.max(0.2, 1.2 - this.time / 200) / ((wave.spawnMult || 1) * this.twist.spawnMult);
@@ -321,7 +340,7 @@ export class Simulation {
             if (this.time >= b.spawnAt && !this.bossSpawned.has(b.slot)) {
                 this.bossSpawned.add(b.slot);
                 const a = this.rng.angle();
-                const d = SIM.SPAWN_RADIUS * 0.8;
+                const d = SIM.BOSS_SPAWN_RADIUS;
                 const boss = new Enemy(
                     this.player.x + cos(a) * d,
                     this.player.y + sin(a) * d,
@@ -334,6 +353,40 @@ export class Simulation {
                 this.emit({ t: 'boss', id: b.id, name: b.name, tagline: b.tagline });
             }
         }
+    }
+
+    /** Drop the next scheduled Build 4 supply crate near the player. Loot cannot repeat consecutively. */
+    _dropCrate() {
+        if (this.time < this.nextCrateAt) return;
+        this.nextCrateAt += SIM.CRATE_EVERY;
+        const a = this.rng.angle();
+        const dist = SIM.CRATE_DIST_MIN + this.rng.next() * (SIM.CRATE_DIST_MAX - SIM.CRATE_DIST_MIN);
+        const pool = CRATE_LOOT_IDS.filter((id) => id !== this.lastLoot);
+        const loot = pool[this.rng.int(pool.length)];
+        this.lastLoot = loot;
+        const crate = new SupplyCrate(
+            this.player.x + cos(a) * dist,
+            this.player.y + sin(a) * dist,
+            loot
+        );
+        this.crates.push(crate);
+        this.emit({ t: 'crateDrop', x: crate.x, y: crate.y });
+    }
+
+    /** Apply the official effect of a collected Build 4 supply crate. */
+    openCrate(crate) {
+        const def = CRATE_LOOT[crate.loot];
+        const p = this.player;
+        if (def.id === 'magnet') {
+            for (const orb of this.xp) orb.vacuum = true;
+        } else if (def.id === 'shield') {
+            p.shieldTimer = def.duration;
+        } else if (def.id === 'printer') {
+            p.printerTimer = def.duration;
+            p.printerMult = def.cooldownMult;
+        }
+        this.stats.crates++;
+        this.emit({ t: 'crate', id: def.id, name: def.name, x: crate.x, y: crate.y });
     }
 
     bossAbility(boss) {
@@ -488,6 +541,7 @@ export class Simulation {
                 damageTakenBySource: { ...this.stats.damageTakenBySource },
                 rangeSeconds: Object.fromEntries(Object.entries(this.stats.rangeTicks).map(([id, n]) => [id, n / SIM.TICK_RATE])),
                 scoreByMinute: { ...this.stats.scoreByMinute },
+                crates: this.stats.crates,
                 choices: this.stats.choices.length
             }
         };
@@ -506,7 +560,7 @@ export class Simulation {
             for (const key of Object.keys(value)) out[key] = cloneValue(value[key], seen);
             return out;
         };
-        for (const key of ['tick', 'time', 'stageId', 'twist', 'twistId', 'character', 'characterId', 'stageMods', 'waves', 'bossPlan', 'bossWarned', 'bossSpawned', 'player', 'enemies', 'projectiles', 'enemyProjectiles', 'mines', 'xp', 'spawnAcc', 'coldAcc', 'enemyDmgMult', 'hpMult', 'wave', 'pendingLevelUps', 'choices', 'picks', 'over', 'won', 'endReason', 'stats']) copy[key] = cloneValue(this[key]);
+        for (const key of ['tick', 'time', 'stageId', 'twist', 'twistId', 'character', 'characterId', 'stageMods', 'waves', 'bossPlan', 'bossWarned', 'bossSpawned', 'player', 'enemies', 'projectiles', 'enemyProjectiles', 'mines', 'xp', 'crates', 'nextCrateAt', 'lastLoot', 'spawnAcc', 'coldAcc', 'enemyDmgMult', 'hpMult', 'wave', 'pendingLevelUps', 'choices', 'picks', 'over', 'won', 'endReason', 'stats']) copy[key] = cloneValue(this[key]);
         copy.rng = cloneValue(this.rng);
         copy.delayed = [];
         copy.events = [];
@@ -524,6 +578,9 @@ export class Simulation {
             buf[0] = v;
             for (let i = 0; i < 8; i++) h = Math.imul(h ^ bytes[i], 16777619);
         };
+        const mixText = (text) => {
+            for (const char of String(text ?? '')) h = Math.imul(h ^ char.charCodeAt(0), 16777619);
+        };
         const p = this.player;
         mix(this.tick);
         mix(p.x);
@@ -531,6 +588,12 @@ export class Simulation {
         mix(p.hp);
         mix(p.exp);
         mix(p.level);
+        mix(p.shieldTimer);
+        mix(p.printerTimer);
+        mix(p.printerMult);
+        mix(this.nextCrateAt);
+        mixText(this.lastLoot);
+        mix(this.stats.crates);
         mix(this.stats.kills);
         mix(this.stats.score);
         mix(this.enemies.length);
@@ -538,6 +601,13 @@ export class Simulation {
             mix(e.x);
             mix(e.y);
             mix(e.hp);
+        }
+        for (const crate of this.crates) {
+            mixText(crate.loot);
+            mix(crate.x);
+            mix(crate.y);
+            mix(crate.fall);
+            mix(crate.life);
         }
         for (const v of this.rng.state()) mix(v);
         return (h >>> 0).toString(16).padStart(8, '0');
