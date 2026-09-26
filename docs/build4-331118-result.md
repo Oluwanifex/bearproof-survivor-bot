@@ -2,7 +2,7 @@
 
 ## Outcome
 
-A deterministic search of **11,750 legal strategy variants** on the 2026-09-26 Build 4 daily contract found a score of **331,118**, exceeding the 322,000 goal by 9,118 points. The run won by defeating all four bosses at tick 70,708 (1,178.47 seconds). This is a local simulator result for one dated challenge, not a guarantee for later daily seeds or a claim of server acceptance.
+Across staged sweeps, **11,884 candidate runs** of legal strategy variants were evaluated on the 2026-09-26 Build 4 daily contract. They found a score of **331,118**, exceeding the 322,000 goal by 9,118 points. The run won by defeating all four bosses at tick 70,708 (1,178.47 seconds). This is a local simulator result for one dated challenge, not a guarantee for later daily seeds or a claim of server acceptance.
 
 | Metric | Result |
 | --- | ---: |
