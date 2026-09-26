@@ -36,12 +36,46 @@ const PASSIVE_VALUE = Object.freeze({
   leverage: 55,
 });
 
+/** Build 4 scoring policy: legal level-up choices only; no simulation/weapon balance overrides. */
+export function chooseBuild4Upgrade(sim) {
+  const policy = { heal: 0.82, dca: 180, hedge: 155, cold: 145, thick: 145, slip: 130, hf: 145, conv: 95, alpha: 80, liq: 65, decay: 7 };
+  const weaponValue = { tongue: 165, diamond_hands: 155, laser_eyes: 155, buyback: 145, airdrop: 135, dead_cat_bounce: 125, green_candle: 115, circuit_breaker: 105, hopium: 90, limit_order: 80, horns: 70 };
+  const hp = sim.player.hp / Math.max(1, sim.player.maxHp);
+  let bestIndex = 0;
+  let bestScore = -Infinity;
+  sim.choices.forEach((card, index) => {
+    let score = -100;
+    if (card.kind === 'heal') score = hp < policy.heal ? 1000 : 0;
+    else if (card.kind === 'passive') {
+      const count = sim.player.passives[card.id]?.count || 0;
+      if (count < 5) {
+        const weights = {
+          dca: policy.dca, hedge: policy.hedge, cold_wallet: policy.cold,
+          thick_skin: policy.thick, slippage: policy.slip, high_frequency: policy.hf,
+          conviction: policy.conv, alpha: policy.alpha, liquidity: policy.liq,
+          whale_gravity: sim.time < 240 ? 115 : 5,
+          compounding: sim.time < 360 ? 90 : 10, momentum: 35, leverage: -250,
+        };
+        score = (weights[card.id] ?? 10) - count * policy.decay
+          + (hp < 0.72 && ['dca', 'hedge', 'cold_wallet', 'thick_skin', 'slippage'].includes(card.id) ? 40 : 0);
+      }
+    } else if (card.kind === 'weapon') {
+      const current = sim.player.weapons.find((weapon) => weapon.id === card.id);
+      if (current || sim.player.weapons.length < 6) {
+        score = (card.evolves ? 500 : 0) + (current ? 75 + current.level * 12 : 125)
+          + (weaponValue[card.id] ?? 50);
+      }
+    }
+    if (score > bestScore) { bestScore = score; bestIndex = index; }
+  });
+  return bestIndex;
+}
+
 export function chooseUpgrade(sim) {
+  if (process.env.DAILY_POLICY === 'build4') return chooseBuild4Upgrade(sim);
   const overrides = String(process.env.CHOICE_OVERRIDE || '').split(',').map((entry) => entry.split(':').map(Number));
   const levelOverride = overrides.find(([level, index]) => sim.player.level === level && Number.isInteger(index) && index >= 0 && index < sim.choices.length);
   if (levelOverride) return levelOverride[1];
-  if (sim.player.level === 26) return 2;
-  if (sim.player.level === 33) return 1;
   if (sim.planner && process.env.USE_PLANNER === '1') return sim.planner.choose(sim, { lookahead: true });
   const hpRatio = sim.player.hp / Math.max(1, sim.player.maxHp);
   if (sim.characterId === 'pepe') {

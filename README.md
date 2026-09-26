@@ -1,8 +1,8 @@
 # Bearproof Survivor Bot
 
-This project targets the **Bearproof Build #3** action-survival game at <https://bearproof.app/>. It is not a Pepe Escobar or Street/Drug Lord market bot.
+This project targets the **Bearproof Build #4** action-survival game at <https://bearproof.app/>. It is not a Pepe Escobar or Street/Drug Lord market bot.
 
-The controller uses Build 3's deterministic simulation contract: one legal movement code per 60-Hz tick, a level-up card index whenever the simulation pauses for an upgrade, a character byte for Bull or Pepe, and a binary replay log suitable for the site's `/api/runs` verifier. Pepe starts with the character-exclusive Tongue Lash and 90 HP but moves 10% faster; the optimized daily controller prioritizes early durability, then evolved weapons, XP recovery, and projectile-safe kiting.
+The simulator mirrors the live Build 4 rules, including the opening wave, official weapons/entities, airdrop crates, and their loot. Runs use one legal movement code per 60-Hz tick, an available level-up card whenever the simulation pauses, and a replay log carrying the Build 4 simulation version. Build 4's 72,000-tick/20-minute cap and all official combat/weapon physics are unchanged. Movement and card priorities are controller policy, not game-balance overrides. Pepe starts with the character-exclusive Tongue Lash and has 90 HP with a 10% speed bonus.
 
 ## Validation
 
@@ -12,11 +12,12 @@ Run:
 npm run build
 npm run benchmark
 npm run today
+npm run tune:build4
 ```
 
-`DESIRED_SCORE` defaults to `300000`. The ordinary benchmark prints the final score, kills, level, bosses, end reason, selected weapons/passives, replay size, and deterministic state hash. `npm run today` fetches the live daily challenge, runs and replays it twice, verifies the deterministic hash, and fails unless it reaches the configured minimum score with a valid win or market-close result. `npm run profile:daily` replays the recorded final-boss timing and planner robustness variants for the 2026-09-25 seed. A submission is only valid when the replay is produced from the same Bearproof build, seed, twist, character, and simulation version used by the challenge.
+`DESIRED_SCORE` is used only by the ordinary benchmark. `npm run today` fetches today's live contract, requires Build 4, refuses known physics/tick-cap overrides, runs twice, and checks replay hash/score determinism. Its default score target is 250,000; a lower result is reported honestly without treating a legal in-cap death as a simulation-rule violation. `npm run tune:build4` runs the deterministic per-seed strategy search and replay-checks its candidates. Local replay compliance is not a claim of server acceptance; any submission still needs the exact Bearproof build, seed, twist, character, and simulation version.
 
-On 2026-09-25, the live Build #3 daily challenge was **Chop Zone / Whale Season**, seed `3994460340`. The best tested planner profile scores **313,836**, records **11,130 kills**, defeats all four bosses, reaches level 36, and wins at 71,837 ticks (19:57.28). Its replay hash is `e748758a`; two identical runs matched. A pair of ±2-second timing perturbations also cleared 313k; a 19:44 trigger missed the 20-minute close, so preserve the tested 19:58 latest-start safeguard. The stateful build planner, one early Whale Gravity stack, and delayed damage-budgeted final-boss engagement were the main improvements over the 197,675-point baseline. This benchmark is seed-specific; daily seeds and twists rotate, so rerun `npm run today` against the live challenge rather than relying on this dated result. See the [score and upgrade breakdown](docs/railway-variables.md#verified-build-3-daily-policy) for the exact result.
+On 2026-09-26, the active Build #4 board was **Crypto Winter / Flash Crash**, seed `526031759`. The best locally replay-verified score candidate observed in this update scored **134,020** with **4,935 kills** and three bosses defeated. It liquidated after 41,030 ticks, which is within Build 4's 72,000-tick maximum; no physics override was used. The requested **250,000** remains unachieved, and server-side acceptance has not been checked. See [Build 4 validation notes](docs/build4-results.md), [source provenance](docs/build4-sources.md), and the [current policy/deployment guardrails](docs/railway-variables.md). Build 3's 313,836 score is historical only and is not evidence for Build 4.
 
 ## Railway deployment
 
@@ -33,11 +34,11 @@ The following variables are optional because the application has safe defaults:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `BEARPROOF_URL` | `https://bearproof.app` | Override the Bearproof API origin only for a compatible environment. |
-| `BEARPROOF_BUILD` | `3` | Build number sent to the Bearproof API; the current daily board is Build 3. |
+| `BEARPROOF_BUILD` | `4` | Build number sent to the Bearproof API; the runner checks the live daily board. |
 
-`DESIRED_SCORE` is used only by the local benchmark command and is not needed for the Railway worker. The simulator and replay verifier enforce the build's fixed 72,000-tick (20-minute) cap; there is no extended tick-cap variable. A run ends when the player dies, the final boss is defeated, or the market closes at the cap. Do not set `MAX_TICKS`, `TELEGRAM_EXTENDED_TEST`, or post-win farm variables. Do not set `NODE_ENV` or `PORT` to make this service work; Node 22 is pinned in `package.json` and the worker uses Telegram long polling. After deploying, the Railway logs should show `Bearproof bot listening`. In Telegram, send `/start`, then `/Play <username> <Solana address> auto` to exercise the workflow. Do not create more than one production service with the same Telegram bot token, because Telegram polling allows only one active consumer for a bot token.
+`DESIRED_SCORE` is used only by the local benchmark command and is not needed for the Railway worker. The simulator and replay verifier enforce Build 4's fixed 72,000-tick (20-minute) cap. Do not set `MAX_TICKS`, `TELEGRAM_EXTENDED_TEST`, post-win farming, cooldown, fire-rate, or spread overrides. A run ends when the player dies, the final boss is defeated, or the market closes at the cap. Do not set `NODE_ENV` or `PORT` to make this service work; Node 22 is pinned in `package.json` and the worker uses Telegram long polling. After deploying, the Railway logs should show `Bearproof bot listening`. In Telegram, send `/start`, then `/Play <username> <Solana address> auto` to exercise the workflow. Do not create more than one production service with the same Telegram bot token, because Telegram polling allows only one active consumer for a bot token.
 
-Set the tested daily-policy variables in Railway’s Variables tab; Railway’s `railway.json` Config as Code format does not configure runtime service variables. See [the complete variable inventory and tuned profile](docs/railway-variables.md) before deploying.
+The Build 4 controller selects a character-legal daily policy by default. Any locally compliant score must still be checked against the site's current submission contract; local replay verification alone does not confirm server acceptance. Railway runtime variables belong in the Variables tab, not `railway.json`; see [current Build 4 settings and guardrails](docs/railway-variables.md).
 
 ## Telegram request format
 

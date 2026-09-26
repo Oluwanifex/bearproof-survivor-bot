@@ -4,7 +4,16 @@ import { Markup, Telegraf } from 'telegraf';
 import { advanceInteractiveRun, chooseUpgrade, createInteractiveRun, upgradeDescription } from '../run-bot.mjs';
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
-const BUILD = Number(process.env.BEARPROOF_BUILD || 3);
+const BUILD = Number(process.env.BEARPROOF_BUILD || 4);
+process.env.DAILY_POLICY ??= 'build4';
+process.env.CHARACTER ??= 'pepe';
+process.env.DAILY_THREAT_RADIUS ??= '70';
+process.env.DAILY_PROJECTILE_MULT ??= '4.5';
+process.env.DAILY_DRIFT ??= '0.003';
+process.env.CRATE_ATTRACTION ??= '0.02';
+process.env.BOSS_SOFT ??= '1';
+process.env.BOSS_SOFT_RANGE ??= '220';
+process.env.BOSS_SOFT_PULL ??= '0.02';
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is required');
 const bot = new Telegraf(token);

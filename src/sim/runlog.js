@@ -22,7 +22,6 @@ import { CHARACTER_IDS, SIM, TWIST_IDS } from './content.js';
 import { isValidCode } from './input-codes.js';
 
 export const RUNLOG_VERSION = 3;
-// Replay decoding must respect the build's immutable standard challenge cap.
 const MAX_TICKS = SIM.MAX_TICKS;
 
 export class RunRecorder {

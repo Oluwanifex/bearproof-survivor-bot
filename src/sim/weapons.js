@@ -37,10 +37,6 @@ export class Weapon {
     getCooldown(player) {
         let cd = this.def.baseCooldown * ipow(0.92, this.level - 1) * player.getCooldownMult();
         if (this.isEvolved() && this.def.evolveCooldownMult) cd *= this.def.evolveCooldownMult;
-        const key = this.id.toUpperCase();
-        const weaponMult = Number(process.env[`FIRE_RATE_${key}`] || 1);
-        const globalMult = Number(process.env.WEAPON_COOLDOWN_MULT || 1);
-        cd *= weaponMult * globalMult;
         return cd;
     }
 
@@ -182,8 +178,7 @@ export class Weapon {
         }
         const target = sim.spatial.findNearest(player.x, player.y, this.getRange(player));
         if (!target) return;
-        const spreadMult = Number(process.env[`SPREAD_${this.id.toUpperCase()}`] || process.env.WEAPON_SPREAD_MULT || 1);
-        const spread = count > 1 ? (this.isEvolved() ? 24 : 14) * spreadMult : 0;
+        const spread = count > 1 ? (this.isEvolved() ? 24 : 14) : 0;
         const base = atan2(target.y - player.y, target.x - player.x);
         const dmg = this.getDamage(player);
         const crit = this.critChance(player);
