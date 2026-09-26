@@ -4,10 +4,45 @@ import { SIM } from '../src/sim/content.js';
 import { decodeRunLog } from '../src/sim/runlog.js';
 import { Simulation, SIM_VERSION } from '../src/sim/sim.js';
 import { BuildPlanner, marginalWeaponDps } from '../src/sim/planner.js';
-import { chooseBuild4Profile } from '../run-bot.mjs';
+import { advanceInteractiveRun, chooseBuild4Profile, createInteractiveRun } from '../run-bot.mjs';
 import { createBot } from '../src/sim/bot.js';
 import { MOVE_TABLE } from '../src/sim/input-codes.js';
 import { BUILD4_TARGET_PRESET, matchesBuild4TargetPreset } from '../src/sim/build4-target-preset.js';
+import { parsePlayCommand } from '../src/play-command.mjs';
+
+test('Play command keeps Auto syntax and accepts an optional positive target', () => {
+  const address = '11111111111111111111111111111111';
+  assert.deepEqual(parsePlayCommand(`/play yagami ${address} Auto 137000`), {
+    username: 'yagami', payout: address, auto: true, targetScore: 137000,
+  });
+  assert.deepEqual(parsePlayCommand(`/play yagami ${address} Auto`), {
+    username: 'yagami', payout: address, auto: true, targetScore: null,
+  });
+  assert.ok(parsePlayCommand(`/play yagami ${address} Auto 0`).error);
+  assert.ok(parsePlayCommand(`/play yagami ${address} 137000`).error);
+});
+
+test('interactive Auto run disengages movement after its score target but keeps simulating', () => {
+  const run = createInteractiveRun(11, { character: 'pepe' });
+  run.scoreTarget = 137000;
+  run.sim.stats.score = 137000;
+  let movementCalls = 0;
+  run.bot.move = () => { movementCalls++; return 1; };
+
+  const result = advanceInteractiveRun(run, { maxTicks: 1 });
+  assert.equal(result.status, 'running');
+  assert.equal(run.disengaged, true);
+  assert.equal(movementCalls, 0);
+  assert.equal(run.sim.tick, 1);
+
+  const fullRun = createInteractiveRun(12, { character: 'pepe' });
+  let fullRunMovementCalls = 0;
+  fullRun.bot.move = () => { fullRunMovementCalls++; return 1; };
+  const fullRunResult = advanceInteractiveRun(fullRun, { maxTicks: 1 });
+  assert.equal(fullRunResult.status, 'running');
+  assert.equal(fullRun.disengaged, undefined);
+  assert.equal(fullRunMovementCalls, 1);
+});
 
 test('simulation clone advances deterministically without changing the source', () => {
   const sim = new Simulation({ seed: 42 });
@@ -51,9 +86,40 @@ test('experimental Build 4 upgrade profiles return an offered legal card', () =>
     { kind: 'heal', id: 'heal' },
   ];
   assert.equal(chooseBuild4Profile(sim, 'leveraged'), 0);
-  for (const profile of ['combat', 'offense', 'defense', 'xp', 'leveraged', 'glass']) {
+  for (const profile of ['combat', 'offense', 'defense', 'xp', 'leveraged', 'glass', 'weapon_rush', 'evolution_rush', 'planner_dps', 'magnet_once']) {
     const index = chooseBuild4Profile(sim, profile);
     assert.ok(Number.isInteger(index) && index >= 0 && index < sim.choices.length, `${profile} returned ${index}`);
+  }
+});
+
+test('aggressive Build 4 profiles prioritize only legal offered weapon upgrades', () => {
+  const sim = new Simulation({ seed: 11 });
+  sim.player.weapons[0].level = 4;
+  sim.choices = [
+    { kind: 'passive', id: 'high_frequency', isNew: true },
+    { kind: 'weapon', id: 'horns', level: 5, evolves: true },
+    { kind: 'heal', id: 'take_profit', amount: 30 },
+  ];
+  assert.equal(chooseBuild4Profile(sim, 'weapon_rush'), 1);
+  assert.equal(chooseBuild4Profile(sim, 'evolution_rush'), 1);
+});
+
+test('magnet_once takes Whale Gravity only up to its legal one-stack cap', () => {
+  const sim = new Simulation({ seed: 11 });
+  const previous = process.env.PICKUP_RANGE_CAP;
+  process.env.PICKUP_RANGE_CAP = '1';
+  sim.choices = [
+    { kind: 'passive', id: 'whale_gravity', isNew: true },
+    { kind: 'weapon', id: 'tongue', level: 1, isNew: true },
+    { kind: 'passive', id: 'high_frequency', isNew: true },
+  ];
+  try {
+    assert.equal(chooseBuild4Profile(sim, 'magnet_once'), 0);
+    sim.player.passives.whale_gravity = { count: 1 };
+    assert.notEqual(chooseBuild4Profile(sim, 'magnet_once'), 0);
+  } finally {
+    if (previous === undefined) delete process.env.PICKUP_RANGE_CAP;
+    else process.env.PICKUP_RANGE_CAP = previous;
   }
 });
 

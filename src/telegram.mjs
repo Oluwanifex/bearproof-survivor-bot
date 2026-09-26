@@ -2,6 +2,7 @@ import 'dotenv/config';
 import crypto from 'node:crypto';
 import { Markup, Telegraf } from 'telegraf';
 import { advanceInteractiveRun, chooseUpgrade, createInteractiveRun, upgradeDescription } from '../run-bot.mjs';
+import { parsePlayCommand } from './play-command.mjs';
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
 const BUILD = Number(process.env.BEARPROOF_BUILD || 4);
@@ -97,7 +98,11 @@ async function submitFinished(ctx, session, result) {
 }
 
 async function continueRun(ctx, session, choice = null) {
+  const wasDisengaged = session.run.disengaged;
   const result = advanceInteractiveRun(session.run, { choice });
+  if (!wasDisengaged && session.run.disengaged) {
+    await ctx.reply(`Score goal ${session.targetScore.toLocaleString()} reached; movement is disengaged. The run will continue until a normal game ending, then submit.`).catch(() => {});
+  }
   if (result.status === 'choice') return promptUpgrade(ctx, session, result.summary || session.run.sim.summary());
   if (result.status === 'done') {
     await submitFinished(ctx, session, result);
@@ -112,18 +117,17 @@ async function continueRun(ctx, session, choice = null) {
   }));
 }
 
-bot.start((ctx) => ctx.reply('Bearproof Survivor Bot ready. Use /Play <username> <Solana address> for manual upgrades, or add `auto` for automatic high-score choices.'));
+bot.start((ctx) => ctx.reply('Bearproof Survivor Bot ready. Use /Play <username> <Solana address> for manual upgrades, /Play <username> <Solana address> Auto for a full automatic run, or add a score to disengage movement after that score.'));
 
 bot.command('play', async (ctx) => {
-  const args = ctx.message.text.replace(/^\/play(?:@\w+)?\s*/i, '').trim().split(/\s+/).filter(Boolean);
-  if (args.length < 2 || args.length > 3 || (args[2] && args[2].toLowerCase() !== 'auto')) {
-    return ctx.reply('Format: /Play <username> <Solana address> [auto]');
-  }
-  const auto = args[2]?.toLowerCase() === 'auto';
+  const parsed = parsePlayCommand(ctx.message.text);
+  if (parsed.error) return ctx.reply(parsed.error);
+  if (parsed.targetScore !== null && !parsed.auto) return ctx.reply('A score target requires Auto mode.');
+  const { auto, targetScore } = parsed;
   let name; let payout;
-  try { name = username(args[0]); payout = address(args[1]); } catch (error) { return ctx.reply(error.message); }
+  try { name = username(parsed.username); payout = address(parsed.payout); } catch (error) { return ctx.reply(error.message); }
   if (sessions.has(ctx.chat.id)) return ctx.reply('A Bearproof run is already active for this chat.');
-  const session = { name, payout, auto, telegramUserId: ctx.from?.id, playerId: playerId(ctx.chat.id), waitingForUpgrade: false };
+  const session = { name, payout, auto, targetScore, telegramUserId: ctx.from?.id, playerId: playerId(ctx.chat.id), waitingForUpgrade: false };
   sessions.set(ctx.chat.id, session);
   try {
     const challenge = await daily();
@@ -133,7 +137,8 @@ bot.command('play', async (ctx) => {
     await api('/api/player', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, name }) });
     await api('/api/payout-address', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, address: payout }) });
     session.run = createInteractiveRun(challenge.seed, { mode: 'daily', twist: challenge.twist?.id, style: 'daily', phase: -1 });
-    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name} in ${auto ? 'automatic high-score' : 'manual upgrade'} mode [72,000-tick standard cap].`);
+    session.run.scoreTarget = targetScore;
+    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name} in ${auto ? 'automatic high-score' : 'manual upgrade'} mode${targetScore === null ? '' : ` until ${targetScore.toLocaleString()} points, then disengaging` } [72,000-tick standard cap].`);
     await continueRun(ctx, session);
   } catch (error) {
     console.error(error);
@@ -165,7 +170,10 @@ bot.command('status', async (ctx) => {
   const session = sessions.get(ctx.chat.id);
   if (!session?.run) return ctx.reply('No active run. Use /Play <username> <Solana address>.');
   const summary = session.run.sim.summary();
-  return ctx.reply(`Time ${Math.round(summary.timeMs / 1000)}s · score ${summary.score.toLocaleString()} · kills ${summary.kills} · level ${summary.level} · HP ${Math.ceil(session.run.sim.player.hp)}/${Math.ceil(session.run.sim.player.maxHp)} · ${session.auto ? 'auto mode' : 'manual mode'}${session.waitingForUpgrade ? '\nWaiting for your upgrade choice.' : ''}`);
+  const targetStatus = session.targetScore === null || session.targetScore === undefined
+    ? ''
+    : ` · goal ${session.targetScore.toLocaleString()}${session.run.disengaged ? ' (movement disengaged)' : ''}`;
+  return ctx.reply(`Time ${Math.round(summary.timeMs / 1000)}s · score ${summary.score.toLocaleString()} · kills ${summary.kills} · level ${summary.level} · HP ${Math.ceil(session.run.sim.player.hp)}/${Math.ceil(session.run.sim.player.maxHp)} · ${session.auto ? 'auto mode' : 'manual mode'}${targetStatus}${session.waitingForUpgrade ? '\nWaiting for your upgrade choice.' : ''}`);
 });
 
 bot.command('stop', async (ctx) => {

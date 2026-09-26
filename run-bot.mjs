@@ -75,6 +75,50 @@ export function chooseBuild4Upgrade(sim) {
 
 /** Optional legal card scorers used by the Build 4 strategy search. */
 export function chooseBuild4Profile(sim, profile) {
+  if (profile === 'magnet_once') {
+    const cap = Math.min(SIM.PASSIVE_MAX_STACK, Math.max(0, Number(process.env.PICKUP_RANGE_CAP ?? 1)));
+    const until = Number(process.env.PICKUP_RANGE_UNTIL ?? 420);
+    const current = sim.player.passives.whale_gravity?.count || 0;
+    if (current < cap && sim.time <= until) {
+      const index = sim.choices.findIndex(card => card.kind === 'passive' && card.id === 'whale_gravity');
+      if (index >= 0) return index;
+    }
+    return new BuildPlanner().choose(sim, { lookahead: false });
+  }
+  if (profile === 'planner_dps') return new BuildPlanner().choose(sim, { lookahead: false });
+  const aggressive = {
+    weapon_rush: { healAt: 0.48, newWeapon: 800, levelWeapon: 650, evolution: 5000, passiveScale: 0.52 },
+    evolution_rush: { healAt: 0.58, newWeapon: 430, levelWeapon: 760, evolution: 6000, passiveScale: 0.78 },
+  }[profile];
+  if (aggressive) {
+    const hp = sim.player.hp / Math.max(1, sim.player.maxHp);
+    const weapon = { tongue: 220, laser_eyes: 215, airdrop: 205, diamond_hands: 195, buyback: 190, circuit_breaker: 185, green_candle: 175, dead_cat_bounce: 170, limit_order: 145, hopium: 135, horns: 110 };
+    let bestIndex = 0;
+    let bestScore = -Infinity;
+    sim.choices.forEach((card, index) => {
+      let score = -1000;
+      if (card.kind === 'heal') score = hp < aggressive.healAt ? 1500 : -10;
+      else if (card.kind === 'weapon') {
+        const current = sim.player.weapons.find(w => w.id === card.id);
+        if (current || sim.player.weapons.length < SIM.MAX_WEAPONS) {
+          score = (card.evolves ? aggressive.evolution : 0)
+            + (current ? aggressive.levelWeapon + current.level * 35 : aggressive.newWeapon)
+            + (weapon[card.id] ?? 50);
+        }
+      } else if (card.kind === 'passive') {
+        const count = sim.player.passives[card.id]?.count || 0;
+        if (count < SIM.PASSIVE_MAX_STACK) {
+          const weights = { high_frequency: 630, conviction: 570, hedge: 520, dca: 500, slippage: 460,
+            thick_skin: 430, cold_wallet: 400, alpha: 350, liquidity: 250, compounding: 180,
+            whale_gravity: sim.time < 240 ? 115 : 5, leverage: -250 };
+          score = (weights[card.id] ?? 10) * aggressive.passiveScale - count * 45;
+          if (hp < 0.72 && ['hedge', 'dca', 'slippage', 'thick_skin', 'cold_wallet'].includes(card.id)) score += 45;
+        }
+      }
+      if (score > bestScore) { bestScore = score; bestIndex = index; }
+    });
+    return bestIndex;
+  }
   const passiveSets = {
     combat: { high_frequency: 630, conviction: 570, hedge: 520, dca: 500, slippage: 460, thick_skin: 430, cold_wallet: 400, alpha: 350, liquidity: 250, compounding: 180 },
     offense: { high_frequency: 760, conviction: 710, hedge: 570, dca: 530, slippage: 490, alpha: 460, liquidity: 420, thick_skin: 390, cold_wallet: 350, compounding: 220 },
@@ -272,7 +316,8 @@ export function advanceInteractiveRun(run, { choice = null, maxTicks = 3_000 } =
   }
   let ticks = 0;
   while (!sim.over && !sim.choices && ticks < maxTicks) {
-    const code = bot.move(sim);
+    if (Number.isFinite(run.scoreTarget) && sim.stats.score >= run.scoreTarget) run.disengaged = true;
+    const code = run.disengaged ? 0 : bot.move(sim);
     recorder.tick(code);
     sim.step(code);
     sim.drainEvents();

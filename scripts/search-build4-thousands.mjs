@@ -9,8 +9,8 @@ import { RunRecorder, replay } from '../src/sim/runlog.js';
 
 let LIVE = Object.freeze({ date: '2026-09-26', seed: 526031759, twist: 'flash_crash', stage: 'winter' });
 const PHYSICS_OVERRIDES = /^(WEAPON_COOLDOWN_MULT|FIRE_RATE_|WEAPON_SPREAD_MULT|SPREAD_|PLAYER_SPEED_MULT|ENEMY_SPEED_MULT|PLAYER_DAMAGE_MULT|ENEMY_HP_MULT|ENEMY_DMG_MULT|SPAWN_MULT|XP_MULT|MAX_TICKS|TICK_RATE|SIM_)/;
-const STRATEGY_KEYS = /^(DAILY_|LATE_|XP_|CRATE_|BOSS_|FINAL_BOSS_|HEAL_RETREAT|DAILY_POLICY|BUILD4_|CHARACTER|ATTACK_BIAS|PEPE_)/;
-const UPGRADE_PROFILES = ['build4', 'combat', 'offense', 'defense', 'xp', 'leveraged', 'glass'];
+const STRATEGY_KEYS = /^(DAILY_|LATE_|XP_|CRATE_|BOSS_|FINAL_BOSS_|HEAL_RETREAT|DAILY_POLICY|BUILD4_|CHARACTER|ATTACK_BIAS|PEPE_|PICKUP_RANGE_)/;
+const UPGRADE_PROFILES = ['build4', 'combat', 'offense', 'defense', 'xp', 'leveraged', 'glass', 'weapon_rush', 'evolution_rush', 'planner_dps', 'magnet_once'];
 
 function random(seed) {
   let a = seed >>> 0;
@@ -92,12 +92,31 @@ function uniqueVariants(count, seed) {
   const templates = seedFile ? readFileSync(seedFile, 'utf8').split('\n').filter(Boolean).map(line => {
     try { return JSON.parse(line); } catch { return null; }
   }).filter(row => row?.env && row?.upgrade).sort((a, b) => b.score - a.score).slice(0, 40) : [];
+  if (process.env.SEARCH_LATE_BOSS_GRID === '1' || process.env.SEARCH_PRESERVE_SEEDS === '1') {
+    for (const template of templates) {
+      if (variants.length >= count) break;
+      add({ ...template, name: `preserved-${template.name}` });
+    }
+  }
   const mutateFromTemplate = (template, index) => {
     const env = { ...template.env };
-    for (const key of ['XP_DECOY', 'HEAL_RETREAT', 'BOSS_FARM', 'BOSS_FARM_BLEND', 'FINAL_BOSS_ATTACK_BLEND', 'FINAL_BOSS_HOLD_BLEND']) {
+    const farmFocus = process.env.SEARCH_FARM_FOCUS === '1';
+    const switches = farmFocus
+      ? ['XP_DECOY', 'HEAL_RETREAT', 'BOSS_FARM', 'BOSS_FARM_BLEND']
+      : ['XP_DECOY', 'HEAL_RETREAT', 'BOSS_FARM', 'BOSS_FARM_BLEND', 'FINAL_BOSS_ATTACK_BLEND', 'FINAL_BOSS_HOLD_BLEND'];
+    for (const key of switches) {
       if (rng() < 0.2) env[key] = choose(['0', '1']);
     }
-    const available = Object.keys(ranges);
+    const farmFocusKeys = [
+      'DAILY_THREAT_RADIUS', 'DAILY_PROJECTILE_MULT', 'DAILY_DRIFT', 'DAILY_XP_TARGET_RANGE',
+      'DAILY_XP_CROWD_LIMIT', 'DAILY_XP_ATTRACTION', 'XP_POST_DROP_START', 'CRATE_ATTRACTION',
+      'CRATE_MAX_CROWD', 'BOSS_SOFT_RANGE', 'BOSS_SOFT_PULL', 'BOSS_BUDGET_FACTOR',
+      'BOSS_FARM_MIN_HP', 'BOSS_FARM_RANGE', 'BOSS_FARM_PULL', 'BOSS_FARM_TANGENT',
+      'HEAL_RETREAT_START', 'HEAL_RETREAT_EXIT', 'XP_DECOY_CROWD', 'XP_DECOY_SECONDS',
+      'XP_DECOY_FORCE', 'XP_RETURN_FORCE', 'XP_DECOY_MIN_DISTANCE', 'XP_DECOY_MIN_HP',
+      'XP_DECOY_COOLDOWN', 'XP_DECOY_AWAY_WEIGHT', 'XP_DECOY_THREAT_WEIGHT',
+    ];
+    const available = farmFocus ? farmFocusKeys : Object.keys(ranges);
     const mutationCount = 1 + Math.floor(rng() * 5);
     for (let n = 0; n < mutationCount; n++) {
       const key = pick(rng, available);
@@ -161,6 +180,108 @@ function uniqueVariants(count, seed) {
           }
         }
       }
+    }
+  }
+  if (process.env.SEARCH_PICKUP_RANGE_GRID === '1') {
+    pickupGrid: for (const template of templates.slice(0, 12)) {
+      for (const profile of ['magnet_once', 'planner_dps', template.upgrade]) {
+        for (const cap of [0, 1, 2]) {
+          for (const until of [180, 300, 420, 600]) {
+            if (variants.length >= count) break pickupGrid;
+            const env = { ...template.env, PICKUP_RANGE_CAP: String(cap), PICKUP_RANGE_UNTIL: String(until) };
+            add({ name: `pickup-grid-${template.name}-${profile}-cap${cap}-until${until}`, env, upgrade: profile, character: template.character || 'pepe' });
+          }
+        }
+      }
+    }
+  }
+  if (process.env.SEARCH_LATE_BOSS_GRID === '1') {
+    const engagements = [1080, 1100, 1120, 1140, 1160, 1170, 1180];
+    const chipStarts = [720, 780, 840, 900, 960, 1020, 1080];
+    const latestTimes = [1080, 1100, 1120, 1140, 1160, 1180, 1190, 1195, 1198];
+    const killWindows = [18, 24, 30, 40, 55, 70, 90, 120];
+    const holdRanges = [450, 650, 850, 1100, 1500, 2000, 2800];
+    const dpsFactors = [0.3, 0.4, 0.55, 0.7, 0.9, 1.2];
+    if (process.env.SEARCH_LATE_BOSS_NEIGHBORS === '1') {
+      lateNeighbors: for (const template of templates) {
+        const baseEngage = Number(template.env.FINAL_BOSS_ENGAGE_AT || 1060);
+        const engagements = [...new Set([-20, -10, 0, 10, 20, 40, 60].map(delta => Math.max(1040, Math.min(1190, baseEngage + delta))))];
+        for (const engage of engagements) {
+          for (const chipOffset of [90, 60, 30]) {
+            for (const attackBlend of ['0', '1']) {
+              for (const holdBlend of ['0', '1']) {
+                for (const latestOffset of [0, 20]) {
+                  for (const upgrade of [...new Set([template.upgrade, 'combat', 'offense'])]) {
+                    if (variants.length >= count) break lateNeighbors;
+                    const chipStart = Math.max(720, engage - chipOffset);
+                    const env = {
+                      ...template.env,
+                      FINAL_BOSS_ENGAGE_AT: String(engage),
+                      FINAL_BOSS_CHIP_START: String(chipStart),
+                      FINAL_BOSS_LATEST_ENGAGE_AT: String(Math.min(1198, engage + latestOffset)),
+                      FINAL_BOSS_KILL_WINDOW: String(Number(template.env.FINAL_BOSS_KILL_WINDOW || 55)),
+                      FINAL_BOSS_ATTACK_BLEND: attackBlend,
+                      FINAL_BOSS_HOLD_BLEND: holdBlend,
+                    };
+                    add({ name: `late-neighbor-${template.name}-${engage}-${chipStart}-${latestOffset}-${attackBlend}-${holdBlend}-${upgrade}`, env, upgrade, character: template.character || 'pepe' });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    for (let i = 0; variants.length < count; i++) {
+      const template = pick(rng, templates.length ? templates.slice(0, 40) : [{ name: 'baseline', env: base, upgrade: 'build4', character: 'pepe' }]);
+      const engage = pick(rng, engagements);
+      const chipStart = pick(rng, chipStarts.filter(value => value <= engage));
+      const latest = pick(rng, latestTimes.filter(value => value >= engage));
+      const killWindow = pick(rng, killWindows);
+      const attackBlend = choose(['0', '1']);
+      const holdBlend = choose(['0', '1']);
+      const holdRange = pick(rng, holdRanges);
+      const dpsFactor = pick(rng, dpsFactors);
+      const budgetFactor = pick(rng, [0.22, 0.3, 0.45, 0.55, 0.7]);
+      const upgrade = pick(rng, UPGRADE_PROFILES);
+      const env = {
+        ...template.env,
+        DAILY_THREAT_RADIUS: choose([0, 8, 15, 22, 28, 35, 45, 55, 70]),
+        DAILY_PROJECTILE_MULT: choose([0, 0.1, 0.35, 0.75, 1.5, 2.5, 4.5]),
+        DAILY_DRIFT: choose([0, 0.0005, 0.0015, 0.003, 0.006, 0.012]),
+        DAILY_XP_TARGET_RANGE: choose([150, 220, 300, 420, 550]),
+        DAILY_XP_CROWD_LIMIT: choose([0, 1, 2, 3]),
+        DAILY_XP_ATTRACTION: choose([0.006, 0.012, 0.02, 0.04]),
+        CRATE_ATTRACTION: choose([0.006, 0.012, 0.02, 0.035]),
+        CRATE_MAX_CROWD: choose([1, 2, 3, 4, 6]),
+        BOSS_SOFT: choose(['0', '1']),
+        BOSS_SOFT_RANGE: choose([160, 200, 220, 260, 320]),
+        BOSS_SOFT_PULL: choose([0.001, 0.003, 0.006, 0.012, 0.02, 0.035]),
+        HEAL_RETREAT: choose(['0', '1']),
+        HEAL_RETREAT_START: choose([0.3, 0.4, 0.5, 0.55, 0.6, 0.7]),
+        HEAL_RETREAT_EXIT: choose([0.65, 0.72, 0.8, 0.86, 0.92, 0.98]),
+        BOSS_FARM: choose(['0', '1']),
+        XP_DECOY: choose(['0', '1']),
+        XP_DECOY_CROWD: choose([0, 1, 2]),
+        XP_DECOY_SECONDS: choose([0.5, 1, 1.5, 2, 3]),
+        XP_DECOY_FORCE: choose([0.015, 0.025, 0.04, 0.06, 0.09]),
+        XP_RETURN_FORCE: choose([0.03, 0.045, 0.06, 0.09, 0.14]),
+        BOSS_BUDGET_FACTOR: String(budgetFactor),
+        FINAL_BOSS_ENGAGE_AT: String(engage),
+        FINAL_BOSS_CHIP_START: String(chipStart),
+        FINAL_BOSS_LATEST_ENGAGE_AT: String(latest),
+        FINAL_BOSS_KILL_WINDOW: String(killWindow),
+        FINAL_BOSS_HOLD_RANGE: String(holdRange),
+        FINAL_BOSS_DPS_FACTOR: String(dpsFactor),
+        FINAL_BOSS_ATTACK_BLEND: attackBlend,
+        FINAL_BOSS_HOLD_BLEND: holdBlend,
+      };
+      add({
+        name: `late-${i + 1}-${template.name}-${engage}-${chipStart}-${latest}-${killWindow}-${holdRange}-${dpsFactor}-${budgetFactor}-${attackBlend}-${holdBlend}-${upgrade}`,
+        env,
+        upgrade,
+        character: template.character || 'pepe',
+      });
     }
   }
   for (let i = 0; variants.length < count; i++) {
