@@ -38,6 +38,8 @@ const PASSIVE_VALUE = Object.freeze({
 
 /** Build 4 scoring policy: legal level-up choices only; no simulation/weapon balance overrides. */
 export function chooseBuild4Upgrade(sim) {
+  const experimentalProfile = process.env.BUILD4_UPGRADE_PROFILE;
+  if (experimentalProfile && experimentalProfile !== 'standard') return chooseBuild4Profile(sim, experimentalProfile);
   const policy = { heal: 0.82, dca: 180, hedge: 155, cold: 145, thick: 145, slip: 130, hf: 145, conv: 95, alpha: 80, liq: 65, decay: 7 };
   const weaponValue = { tongue: 165, diamond_hands: 155, laser_eyes: 155, buyback: 145, airdrop: 135, dead_cat_bounce: 125, green_candle: 115, circuit_breaker: 105, hopium: 90, limit_order: 80, horns: 70 };
   const hp = sim.player.hp / Math.max(1, sim.player.maxHp);
@@ -65,6 +67,42 @@ export function chooseBuild4Upgrade(sim) {
         score = (card.evolves ? 500 : 0) + (current ? 75 + current.level * 12 : 125)
           + (weaponValue[card.id] ?? 50);
       }
+    }
+    if (score > bestScore) { bestScore = score; bestIndex = index; }
+  });
+  return bestIndex;
+}
+
+/** Optional legal card scorers used by the Build 4 strategy search. */
+export function chooseBuild4Profile(sim, profile) {
+  const passiveSets = {
+    combat: { high_frequency: 630, conviction: 570, hedge: 520, dca: 500, slippage: 460, thick_skin: 430, cold_wallet: 400, alpha: 350, liquidity: 250, compounding: 180 },
+    offense: { high_frequency: 760, conviction: 710, hedge: 570, dca: 530, slippage: 490, alpha: 460, liquidity: 420, thick_skin: 390, cold_wallet: 350, compounding: 220 },
+    defense: { hedge: 700, dca: 650, slippage: 590, thick_skin: 570, cold_wallet: 550, high_frequency: 430, conviction: 360, alpha: 260, liquidity: 220, compounding: 180 },
+    xp: { whale_gravity: 850, compounding: 700, dca: 480, hedge: 460, high_frequency: 430, slippage: 390, thick_skin: 360, cold_wallet: 340, conviction: 320, alpha: 260, liquidity: 220 },
+    leveraged: { hedge: 760, dca: 660, high_frequency: 610, slippage: 570, thick_skin: 510, cold_wallet: 480, conviction: 440, alpha: 380, liquidity: 300, leverage: 350, compounding: 100 },
+    glass: { high_frequency: 900, conviction: 840, alpha: 780, leverage: 620, liquidity: 560, hedge: 380, dca: 340, slippage: 300, thick_skin: 240, cold_wallet: 220, compounding: 100 },
+  }[profile];
+  if (!passiveSets) throw new Error(`Unknown Build 4 upgrade profile: ${profile}`);
+  const hp = sim.player.hp / Math.max(1, sim.player.maxHp);
+  const weapon = { tongue: 175, laser_eyes: 165, buyback: 160, diamond_hands: 155, circuit_breaker: 145, green_candle: 140, airdrop: 130, dead_cat_bounce: 120, hopium: 90, limit_order: 75, horns: 65 };
+  let bestIndex = 0;
+  let bestScore = -Infinity;
+  sim.choices.forEach((card, index) => {
+    let score = -1000;
+    if (card.kind === 'heal') score = hp < (profile === 'glass' ? 0.64 : profile === 'offense' ? 0.58 : 0.76) ? 1500 : -10;
+    else if (card.kind === 'weapon') {
+      const current = sim.player.weapons.find(w => w.id === card.id);
+      if (current || sim.player.weapons.length < 6) score = (card.evolves ? 1100 : 0) + (current ? 150 + current.level * 25 : 170) + (weapon[card.id] ?? 50);
+    } else if (card.kind === 'passive') {
+      const count = sim.player.passives[card.id]?.count || 0;
+      score = (passiveSets[card.id] ?? -250) - count * (profile === 'offense' ? 120 : 90);
+      if (card.id === 'leverage') {
+        const hedge = sim.player.passives.hedge?.count || 0;
+        score = profile === 'leveraged' && count === 0 && hedge >= 2 ? 800 : -500;
+      }
+      if (hp < 0.72 && ['hedge', 'dca', 'slippage', 'thick_skin', 'cold_wallet'].includes(card.id)) score += 100;
+      if (count >= SIM.PASSIVE_MAX_STACK) score = -1000;
     }
     if (score > bestScore) { bestScore = score; bestIndex = index; }
   });

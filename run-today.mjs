@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { runBot } from './run-bot.mjs';
 import { replay } from './src/sim/runlog.js';
 import { SIM_VERSION } from './src/sim/sim.js';
+import { BUILD4_TARGET_PRESET, matchesBuild4TargetPreset } from './src/sim/build4-target-preset.js';
 
 const response = await fetch('https://bearproof.app/api/daily');
 if (!response.ok) throw new Error(`GET /api/daily failed: ${response.status} ${response.statusText}`);
@@ -20,7 +21,7 @@ if (physicsOverrideNames.length) {
   throw new Error(`Remove physics/tick overrides before running Build 4: ${physicsOverrideNames.join(', ')}`);
 }
 
-const policyDefaults = {
+const standardPolicyDefaults = {
   DAILY_POLICY: 'build4',
   CHARACTER: 'pepe',
   DAILY_THREAT_RADIUS: '70',
@@ -36,7 +37,19 @@ const policyDefaults = {
   HEAL_RETREAT_EXIT: '0.86',
   XP_DECOY: '0',
 };
+const challengePolicyDefaults = {
+  DAILY_POLICY: 'build4',
+  CHARACTER: BUILD4_TARGET_PRESET.character,
+  BUILD4_UPGRADE_PROFILE: BUILD4_TARGET_PRESET.upgradeProfile,
+  ...BUILD4_TARGET_PRESET.env,
+};
+const targetChallenge = process.env.BUILD4_TARGET_PRESET !== '0' && matchesBuild4TargetPreset(daily);
+const policyDefaults = targetChallenge ? challengePolicyDefaults : standardPolicyDefaults;
 for (const [name, value] of Object.entries(policyDefaults)) process.env[name] ??= value;
+const targetPresetApplied = targetChallenge
+  && process.env.CHARACTER === BUILD4_TARGET_PRESET.character
+  && process.env.BUILD4_UPGRADE_PROFILE === BUILD4_TARGET_PRESET.upgradeProfile
+  && Object.entries(BUILD4_TARGET_PRESET.env).every(([name, value]) => process.env[name] === value);
 
 const character = process.env.CHARACTER;
 const options = { mode: 'daily', twist: daily.twist.id, character, style: 'daily', phase: -1 };
@@ -50,7 +63,7 @@ const verified = verification.ok
   && first.summary.stage === daily.stage
   && verification.summary.stage === daily.stage
   && first.summary.twist === daily.twist.id;
-const scoreTarget = Number(process.env.MIN_DAILY_SCORE ?? 250_000);
+const scoreTarget = Number(process.env.MIN_DAILY_SCORE ?? 322_000);
 if (!Number.isFinite(scoreTarget) || scoreTarget < 0) {
   throw new Error(`Invalid MIN_DAILY_SCORE: ${process.env.MIN_DAILY_SCORE}`);
 }
@@ -73,6 +86,7 @@ console.log(JSON.stringify({
   simVersion: SIM_VERSION,
   physicsOverrides: 'none',
   policy: process.env.DAILY_POLICY,
+  policyPreset: targetPresetApplied ? BUILD4_TARGET_PRESET.id : null,
   character,
   ...first.summary,
   replayBytes: first.log.length,

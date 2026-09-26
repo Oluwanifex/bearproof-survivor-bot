@@ -1,0 +1,65 @@
+export const BUILD4_TARGET_PRESET = Object.freeze({
+  id: '2026-09-26-winter-flash-crash-322k',
+  date: '2026-09-26',
+  build: 4,
+  stage: 'winter',
+  seed: 526031759,
+  twist: 'flash_crash',
+  character: 'pepe',
+  upgradeProfile: 'combat',
+  targetScore: 322_000,
+  achievedScore: 331_118,
+  ticks: 70_708,
+  bossKills: 4,
+  hash: '135ecf39',
+  env: Object.freeze({
+    BOSS_BUDGET_FACTOR: '0.55',
+    BOSS_FARM: '0',
+    BOSS_FARM_BLEND: '1',
+    BOSS_FARM_MIN_HP: '0.45',
+    BOSS_FARM_PULL: '0.06',
+    BOSS_FARM_RANGE: '100',
+    BOSS_FARM_TANGENT: '0.65',
+    BOSS_SOFT: '1',
+    BOSS_SOFT_PULL: '0.02',
+    BOSS_SOFT_RANGE: '260',
+    CRATE_ATTRACTION: '0.012',
+    CRATE_MAX_CROWD: '4',
+    DAILY_DRIFT: '0.003',
+    DAILY_PROJECTILE_MULT: '0.75',
+    DAILY_THREAT_RADIUS: '35',
+    DAILY_XP_ATTRACTION: '0.012',
+    DAILY_XP_CROWD_LIMIT: '1',
+    DAILY_XP_TARGET_RANGE: '420',
+    FINAL_BOSS_ATTACK_BLEND: '1',
+    FINAL_BOSS_CHIP_START: '970',
+    FINAL_BOSS_ENGAGE_AT: '1060',
+    FINAL_BOSS_HOLD_BLEND: '0',
+    FINAL_BOSS_HOLD_RANGE: '450',
+    FINAL_BOSS_KILL_WINDOW: '55',
+    FINAL_BOSS_LATEST_ENGAGE_AT: '1060',
+    HEAL_RETREAT: '0',
+    HEAL_RETREAT_EXIT: '0.98',
+    HEAL_RETREAT_START: '0.4',
+    XP_DECOY: '1',
+    XP_DECOY_AWAY_WEIGHT: '1.5',
+    XP_DECOY_COOLDOWN: '10',
+    XP_DECOY_CROWD: '0',
+    XP_DECOY_FORCE: '0.04',
+    XP_DECOY_MIN_DISTANCE: '240',
+    XP_DECOY_MIN_HP: '0.55',
+    XP_DECOY_SECONDS: '1.5',
+    XP_DECOY_THREAT_WEIGHT: '1',
+    XP_POST_DROP_START: '600',
+    XP_RETURN_FORCE: '0.09',
+  }),
+});
+
+export function matchesBuild4TargetPreset(challenge) {
+  return Boolean(challenge)
+    && challenge.date === BUILD4_TARGET_PRESET.date
+    && Number(challenge.build) === BUILD4_TARGET_PRESET.build
+    && challenge.stage === BUILD4_TARGET_PRESET.stage
+    && challenge.seed === BUILD4_TARGET_PRESET.seed
+    && challenge.twist?.id === BUILD4_TARGET_PRESET.twist;
+}
