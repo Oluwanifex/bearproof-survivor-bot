@@ -231,7 +231,7 @@ export function runBot(seed, { mode = 'free', twist = null, character = process.
   return { summary: sim.summary(), log: recorder.toBytes(), hash: sim.stateHash(), twist: resolvedTwist };
 }
 
-export function createInteractiveRun(seed, { mode = 'free', twist = null, character = process.env.CHARACTER || 'bull', phase = 0, style = 'survive' } = {}) {
+export function createInteractiveRun(seed, { mode = 'free', twist = null, character = process.env.CHARACTER || 'bull', phase = 0, style = 'survive', scoreTarget = null } = {}) {
   const resolvedTwist = mode === 'daily' ? (twist || dailyTwistForSeed(seed)) : null;
   const sim = new Simulation({ seed, twist: resolvedTwist, character });
   const bot = createBot({ style, phase });
@@ -245,7 +245,15 @@ export function createInteractiveRun(seed, { mode = 'free', twist = null, charac
     twist: resolvedTwist,
     character,
     mode,
+    scoreTarget,
+    retiring: false,
   };
+}
+
+/** The game pauses for level-ups, so retirement must choose a legal card; avoid healing when possible. */
+export function chooseRetirementUpgrade(sim) {
+  const nonHealIndex = sim.choices?.findIndex((card) => card.kind !== 'heal') ?? -1;
+  return nonHealIndex >= 0 ? nonHealIndex : 0;
 }
 
 export function upgradeDescription(card) {
@@ -263,8 +271,11 @@ export function upgradeDescription(card) {
 
 export function advanceInteractiveRun(run, { choice = null, maxTicks = 3_000 } = {}) {
   const { sim, recorder, bot } = run;
+  if (!run.retiring && run.scoreTarget !== null && sim.stats.score >= run.scoreTarget) run.retiring = true;
   if (sim.choices) {
-    if (!Number.isInteger(choice) || choice < 0 || choice >= sim.choices.length) {
+    if (run.retiring) {
+      choice = chooseRetirementUpgrade(sim);
+    } else if (!Number.isInteger(choice) || choice < 0 || choice >= sim.choices.length) {
       return { status: 'choice', choices: sim.choices };
     }
     recorder.pick(sim.tick, choice);
@@ -272,11 +283,15 @@ export function advanceInteractiveRun(run, { choice = null, maxTicks = 3_000 } =
   }
   let ticks = 0;
   while (!sim.over && !sim.choices && ticks < maxTicks) {
-    const code = bot.move(sim);
+    const code = run.retiring ? 0 : bot.move(sim);
     recorder.tick(code);
     sim.step(code);
     sim.drainEvents();
     ticks += 1;
+    if (!run.retiring && run.scoreTarget !== null && sim.stats.score >= run.scoreTarget) {
+      run.retiring = true;
+      return { status: 'target-reached', summary: sim.summary() };
+    }
   }
   if (sim.choices) return { status: 'choice', choices: sim.choices, summary: sim.summary() };
   if (sim.over) return { status: 'done', summary: sim.summary(), log: recorder.toBytes(), hash: sim.stateHash(), twist: run.twist };

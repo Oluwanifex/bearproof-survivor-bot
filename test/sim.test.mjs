@@ -4,10 +4,11 @@ import { SIM } from '../src/sim/content.js';
 import { decodeRunLog } from '../src/sim/runlog.js';
 import { Simulation, SIM_VERSION } from '../src/sim/sim.js';
 import { BuildPlanner, marginalWeaponDps } from '../src/sim/planner.js';
-import { chooseBuild4Profile } from '../run-bot.mjs';
+import { advanceInteractiveRun, chooseBuild4Profile, chooseRetirementUpgrade, createInteractiveRun } from '../run-bot.mjs';
 import { createBot } from '../src/sim/bot.js';
 import { MOVE_TABLE } from '../src/sim/input-codes.js';
 import { BUILD4_TARGET_PRESET, matchesBuild4TargetPreset } from '../src/sim/build4-target-preset.js';
+import { parsePlayArgs } from '../src/play-command.js';
 
 test('simulation clone advances deterministically without changing the source', () => {
   const sim = new Simulation({ seed: 42 });
@@ -154,4 +155,37 @@ test('XP decoy deliberately draws pursuit away from the targeted orb', () => {
       else process.env[key] = previous[key];
     }
   }
+});
+
+test('play command accepts optional positive Auto score targets', () => {
+  assert.deepEqual(parsePlayArgs(['yagami', 'validAddress', 'Auto', '137,000']), {
+    name: 'yagami', payout: 'validAddress', auto: true, scoreTarget: 137_000,
+  });
+  assert.equal(parsePlayArgs(['yagami', 'validAddress', 'auto']).scoreTarget, null);
+  assert.throws(() => parsePlayArgs(['yagami', 'validAddress', '137000']), /only be used with Auto/);
+  assert.throws(() => parsePlayArgs(['yagami', 'validAddress', 'auto', '0']), /positive whole number/);
+  assert.throws(() => parsePlayArgs(['yagami', 'validAddress', 'auto', '13x']), /positive whole number/);
+});
+
+test('score target switches interactive run to idle movement until game-over', () => {
+  const run = createInteractiveRun(42, { scoreTarget: 1 });
+  const targetResult = advanceInteractiveRun(run, { maxTicks: 100 });
+  assert.equal(targetResult.status, 'target-reached');
+  assert.ok(targetResult.summary.score >= 1);
+  assert.equal(run.retiring, true);
+  const startTick = run.sim.tick;
+  const result = advanceInteractiveRun(run, { maxTicks: 4 });
+  assert.equal(run.sim.tick, startTick + 4);
+  assert.equal(run.sim.player.moving, false);
+  assert.equal(result.status, 'running');
+});
+
+test('retirement mode avoids healing if any legal non-heal upgrade is offered', () => {
+  const sim = { choices: [
+    { kind: 'heal', id: 'take_profit' },
+    { kind: 'weapon', id: 'tongue' },
+    { kind: 'passive', id: 'leverage' },
+  ] };
+  assert.equal(chooseRetirementUpgrade(sim), 1);
+  assert.equal(chooseRetirementUpgrade({ choices: [{ kind: 'heal' }] }), 0);
 });

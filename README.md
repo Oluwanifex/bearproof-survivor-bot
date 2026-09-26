@@ -50,11 +50,12 @@ The requested intake formats are:
 ```text
 /Play <username> <address>
 /Play <username> <address> auto
+/Play <username> <address> auto <score-target>
 ```
 
 For Bearproof, `<address>` must be a **Solana public address** (base58, 32–44 characters). The username is the Bearproof board name. The bot should start a daily or free run, drive the simulation with the legal replay inputs, submit the verified claimed summary and encoded log to `/api/runs`, and associate the payout address through `/api/payout-address`. Never collect or transmit a private key or seed phrase.
 
-During a manual Telegram run, the simulation pauses at every level-up and sends three inline buttons containing the available upgrade cards. Each card includes its level/evolution state and the concrete effect it provides, such as `Damage +10%`, `Attack speed +8%`, or `A five-beam fan with +10% crit`. The user selects one button; that exact card index is recorded in the deterministic replay, and the bot resumes. Adding the final `auto` argument selects every upgrade using the controller's high-score policy without waiting for Telegram input. `/status` reports the current score, kills, level, HP, mode, and whether an upgrade selection is pending. `/stop` cancels the run without submission.
+During a manual Telegram run, the simulation pauses at every level-up and sends three inline buttons containing the available upgrade cards. Each card includes its level/evolution state and the concrete effect it provides, such as `Damage +10%`, `Attack speed +8%`, or `A five-beam fan with +10% crit`. The user selects one button; that exact card index is recorded in the deterministic replay, and the bot resumes. Adding `auto` selects upgrades with the controller's high-score policy. Add a positive whole-number score target after `auto` (for example, `/Play yagami <address> auto 137000`) to switch to idle movement once the run reaches that score. The run then continues until the character is defeated and submits that replay; the final score can exceed the target because score keeps accumulating during the idle phase. The game pauses at level-ups and requires a legal card choice, so retirement mode avoids healing if any non-heal card is offered rather than skipping upgrades entirely. `/status` reports the current score, kills, level, HP, mode, target, and whether retirement has started. `/stop` cancels the run without submission.
 
 ## Server contract
 

@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import { Markup, Telegraf } from 'telegraf';
-import { advanceInteractiveRun, chooseUpgrade, createInteractiveRun, upgradeDescription } from '../run-bot.mjs';
+import { advanceInteractiveRun, chooseRetirementUpgrade, chooseUpgrade, createInteractiveRun, upgradeDescription } from '../run-bot.mjs';
+import { parsePlayArgs } from './play-command.js';
 
 const API_BASE = process.env.BEARPROOF_URL || 'https://bearproof.app';
 const BUILD = Number(process.env.BEARPROOF_BUILD || 4);
@@ -60,7 +61,7 @@ function choiceKeyboard(chatId, choices) {
 async function promptUpgrade(ctx, session, summary) {
   const choices = session.run.sim.choices || [];
   if (session.auto) {
-    const choice = chooseUpgrade(session.run.sim);
+    const choice = session.run.retiring ? chooseRetirementUpgrade(session.run.sim) : chooseUpgrade(session.run.sim);
     setImmediate(() => continueRun(ctx, session, choice).catch((error) => {
       console.error(error);
       sessions.delete(ctx.chat.id);
@@ -104,6 +105,10 @@ async function continueRun(ctx, session, choice = null) {
     sessions.delete(ctx.chat.id);
     return;
   }
+  if (result.status === 'target-reached' && !session.targetAnnounced) {
+    session.targetAnnounced = true;
+    await ctx.reply(`Score target ${session.scoreTarget.toLocaleString()} reached at ${result.summary.score.toLocaleString()}. Auto movement is now idle; the run will continue until the character is defeated and submitted.`);
+  }
   // Keep the event loop responsive while advancing a long deterministic run.
   setImmediate(() => continueRun(ctx, session).catch((error) => {
     console.error(error);
@@ -116,14 +121,13 @@ bot.start((ctx) => ctx.reply('Bearproof Survivor Bot ready. Use /Play <username>
 
 bot.command('play', async (ctx) => {
   const args = ctx.message.text.replace(/^\/play(?:@\w+)?\s*/i, '').trim().split(/\s+/).filter(Boolean);
-  if (args.length < 2 || args.length > 3 || (args[2] && args[2].toLowerCase() !== 'auto')) {
-    return ctx.reply('Format: /Play <username> <Solana address> [auto]');
-  }
-  const auto = args[2]?.toLowerCase() === 'auto';
+  let parsed;
+  try { parsed = parsePlayArgs(args); } catch (error) { return ctx.reply(error.message); }
+  const { auto, scoreTarget } = parsed;
   let name; let payout;
-  try { name = username(args[0]); payout = address(args[1]); } catch (error) { return ctx.reply(error.message); }
+  try { name = username(parsed.name); payout = address(parsed.payout); } catch (error) { return ctx.reply(error.message); }
   if (sessions.has(ctx.chat.id)) return ctx.reply('A Bearproof run is already active for this chat.');
-  const session = { name, payout, auto, telegramUserId: ctx.from?.id, playerId: playerId(ctx.chat.id), waitingForUpgrade: false };
+  const session = { name, payout, auto, scoreTarget, targetAnnounced: false, telegramUserId: ctx.from?.id, playerId: playerId(ctx.chat.id), waitingForUpgrade: false };
   sessions.set(ctx.chat.id, session);
   try {
     const challenge = await daily();
@@ -132,8 +136,8 @@ bot.command('play', async (ctx) => {
     await api('/api/session', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, build: BUILD, mode: 'daily' }) });
     await api('/api/player', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, name }) });
     await api('/api/payout-address', { method: 'POST', body: JSON.stringify({ playerId: session.playerId, address: payout }) });
-    session.run = createInteractiveRun(challenge.seed, { mode: 'daily', twist: challenge.twist?.id, style: 'daily', phase: -1 });
-    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name} in ${auto ? 'automatic high-score' : 'manual upgrade'} mode [72,000-tick standard cap].`);
+    session.run = createInteractiveRun(challenge.seed, { mode: 'daily', twist: challenge.twist?.id, style: 'daily', phase: -1, scoreTarget });
+    await ctx.reply(`Running Bearproof Daily Build #${BUILD} (${challenge.twist?.name || 'no twist'}) for ${name} in ${auto ? 'automatic high-score' : 'manual upgrade'} mode${scoreTarget ? ` with a ${scoreTarget.toLocaleString()} score target` : ''} [72,000-tick standard cap].`);
     await continueRun(ctx, session);
   } catch (error) {
     console.error(error);
@@ -165,7 +169,7 @@ bot.command('status', async (ctx) => {
   const session = sessions.get(ctx.chat.id);
   if (!session?.run) return ctx.reply('No active run. Use /Play <username> <Solana address>.');
   const summary = session.run.sim.summary();
-  return ctx.reply(`Time ${Math.round(summary.timeMs / 1000)}s · score ${summary.score.toLocaleString()} · kills ${summary.kills} · level ${summary.level} · HP ${Math.ceil(session.run.sim.player.hp)}/${Math.ceil(session.run.sim.player.maxHp)} · ${session.auto ? 'auto mode' : 'manual mode'}${session.waitingForUpgrade ? '\nWaiting for your upgrade choice.' : ''}`);
+  return ctx.reply(`Time ${Math.round(summary.timeMs / 1000)}s · score ${summary.score.toLocaleString()} · kills ${summary.kills} · level ${summary.level} · HP ${Math.ceil(session.run.sim.player.hp)}/${Math.ceil(session.run.sim.player.maxHp)} · ${session.auto ? 'auto mode' : 'manual mode'}${session.scoreTarget ? ` · target ${session.scoreTarget.toLocaleString()}${session.run.retiring ? ' reached; idling' : ''}` : ''}${session.waitingForUpgrade ? '\nWaiting for your upgrade choice.' : ''}`);
 });
 
 bot.command('stop', async (ctx) => {
