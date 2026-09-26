@@ -95,7 +95,7 @@ export class Simulation {
         this.stats = {
             kills: 0, score: 0, bossKills: 0, normalKillScore: 0, bossKillScore: 0, damageTaken: 0, damageDealt: 0,
             damageByWeapon: Object.create(null), bossDamage: 0, bossDamageById: Object.create(null),
-            xpSpawned: 0, xpCollected: 0, xpExpired: 0, damageTakenBySource: Object.create(null),
+            xpSpawned: 0, xpCollected: 0, xpExpired: 0, crateLoot: Object.create(null), damageTakenBySource: Object.create(null),
             rangeTicks: Object.create(null), scoreByMinute: Object.create(null), choices: [], crates: 0
         };
         this.events = [];
@@ -269,6 +269,7 @@ export class Simulation {
             this.stats.score += killScore;
             if (e.boss) this.stats.bossKillScore += killScore;
             else this.stats.normalKillScore += killScore;
+            this.stats.xpSpawned += e.exp;
             this.xp.push(new XpOrb(e.x, e.y, e.exp));
         }
         this.emit({ t: 'kill', x: e.x, y: e.y, id: e.id, boss: e.boss, self: !!e.selfDestructed });
@@ -386,6 +387,7 @@ export class Simulation {
             p.printerMult = def.cooldownMult;
         }
         this.stats.crates++;
+        this.stats.crateLoot[def.id] = (this.stats.crateLoot[def.id] || 0) + 1;
         this.emit({ t: 'crate', id: def.id, name: def.name, x: crate.x, y: crate.y });
     }
 
@@ -427,6 +429,8 @@ export class Simulation {
     }
 
     collectXp(orb) {
+        orb.collected = true;
+        this.stats.xpCollected += orb.value;
         this.pendingLevelUps += this.player.gainExp(orb.value);
         this.emit({ t: 'pickup', x: orb.x, y: orb.y, v: orb.value });
     }
@@ -542,6 +546,7 @@ export class Simulation {
                 rangeSeconds: Object.fromEntries(Object.entries(this.stats.rangeTicks).map(([id, n]) => [id, n / SIM.TICK_RATE])),
                 scoreByMinute: { ...this.stats.scoreByMinute },
                 crates: this.stats.crates,
+                crateLoot: { ...this.stats.crateLoot },
                 choices: this.stats.choices.length
             }
         };
@@ -594,6 +599,9 @@ export class Simulation {
         mix(this.nextCrateAt);
         mixText(this.lastLoot);
         mix(this.stats.crates);
+        mix(this.stats.xpSpawned);
+        mix(this.stats.xpCollected);
+        mix(this.stats.xpExpired);
         mix(this.stats.kills);
         mix(this.stats.score);
         mix(this.enemies.length);
@@ -608,6 +616,10 @@ export class Simulation {
             mix(crate.y);
             mix(crate.fall);
             mix(crate.life);
+        }
+        for (const [loot, count] of Object.entries(this.stats.crateLoot).sort(([a], [b]) => a.localeCompare(b))) {
+            mixText(loot);
+            mix(count);
         }
         for (const v of this.rng.state()) mix(v);
         return (h >>> 0).toString(16).padStart(8, '0');
