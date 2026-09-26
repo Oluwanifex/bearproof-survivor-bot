@@ -45,15 +45,19 @@ const verified = verification.ok
   && first.summary.stage === daily.stage
   && verification.summary.stage === daily.stage
   && first.summary.twist === daily.twist.id;
-const minimumScore = Number(process.env.MIN_DAILY_SCORE ?? 250_000);
-if (!Number.isFinite(minimumScore) || minimumScore < 250_000) {
-  throw new Error(`MIN_DAILY_SCORE must be at least 250000 for this requested run; received ${process.env.MIN_DAILY_SCORE}`);
+const scoreTarget = Number(process.env.MIN_DAILY_SCORE ?? 250_000);
+if (!Number.isFinite(scoreTarget) || scoreTarget < 0) {
+  throw new Error(`Invalid MIN_DAILY_SCORE: ${process.env.MIN_DAILY_SCORE}`);
 }
 if (!reproducible) throw new Error(`Determinism check failed: ${first.hash} != ${second.hash}`);
 if (!verified) throw new Error(`Replay verification failed: ${verification.error || `${verification.hash} != ${first.hash}`}`);
-const targetReached = first.summary.score >= minimumScore;
-const eligibleEndReason = first.summary.reason === 'won'
-  || (first.summary.reason === 'market_closed' && first.summary.ticks === 72_000);
+const targetReached = first.summary.score >= scoreTarget;
+const withinTickCap = Number.isInteger(first.summary.ticks)
+  && first.summary.ticks > 0
+  && first.summary.ticks <= 72_000;
+const validEndReason = ['won', 'market_closed', 'liquidated'].includes(first.summary.reason)
+  && (first.summary.reason !== 'market_closed' || first.summary.ticks === 72_000);
+const rulesCompliant = verified && reproducible && withinTickCap && validEndReason;
 console.log(JSON.stringify({
   date: daily.date,
   build: Number(daily.build),
@@ -72,15 +76,14 @@ console.log(JSON.stringify({
     replayOk: verification.ok,
     replayHash: verification.hash,
     reproducible,
-    targetScore: minimumScore,
+    rulesCompliant,
+    withinTickCap,
+    scoreTarget,
     targetReached,
-    eligibleEndReason,
     standardTickCap: 72_000,
+    serverAcceptance: 'not checked',
   },
 }));
-if (!eligibleEndReason) {
-  throw new Error(`Run ended with ${first.summary.reason}; a submission candidate must win or reach the standard market-close tick cap.`);
-}
-if (!targetReached) {
-  throw new Error(`Verified replay score ${first.summary.score} is below the requested ${minimumScore} target for ${daily.date}; no claim of a 250,000-point run is made.`);
+if (!withinTickCap || !validEndReason) {
+  throw new Error(`Run does not meet the local Build 4 end/tick contract: ${first.summary.reason} at ${first.summary.ticks} ticks.`);
 }

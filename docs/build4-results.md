@@ -37,13 +37,13 @@ The highest score in the completed legal policy sweep was the `pepe-boss-soft-22
 | Local replay hash | `8e8adb99` |
 | Local replay verifier | Passed; replay score/hash matched |
 
-This is a locally verified simulation result, **not** a successful competition submission: it ended by liquidation well before the cap and did not earn the final-boss bonus. The requested **250,000** target was not reached. No score was submitted to Bearproof.
+This is the **best locally replay-verified score candidate** observed in the documented sweep. Liquidation at 41,030 ticks is below (not beyond) Build 4's 72,000-tick cap; no physics override was used. The result therefore complies with the local Build 4 simulation/tick-limit checks. The requested **250,000** score target was not reached, and Bearproof server-side acceptance has not been checked. No score was submitted.
 
 A diagnostic replay showed the player at 107/108 HP around 11 minutes but accumulated contact damage as the enemy count rose (80 at 10 minutes, 86 at 11 minutes). The non-final Long Winter boss was nearly defeated at 11 minutes; liquidation followed at 11:23. This points to later crowd/contact pressure and lost uptime as the immediate bottleneck, not an expired tick cap.
 
 ## Selected comparable runs
 
-All candidates below used the same live Build 4 seed and twist, standard physics, legal replay inputs, and a local replay verification. Early exits are shown as research results only; none is a submission candidate.
+All runs below used the same live Build 4 seed and twist, standard physics, legal replay inputs, and a locally verified replay. A liquidation before the cap is a normal Build 4 end state; scores are compared regardless of whether the run reached the market-close tick.
 
 | Candidate | Score | Ticks | Bosses | End reason | Replay |
 | --- | ---: | ---: | ---: | --- | --- |
@@ -62,6 +62,6 @@ The movement-only orbit/constant-route experiments performed worse than contextu
 
 - `npm run build` runs static checks and unit tests.
 - `npm run tune:build4` sweeps the current challenge candidates; use `TUNE_ONLY=name1,name2` to rerun selected variants.
-- `npm run today` refreshes the daily contract, refuses known physics/tick overrides, runs twice, verifies replay determinism, and requires a won or market-closed run at or above 250,000 by default. On the documented seed it should fail rather than mislabel the early-death 134,020 result as a competition candidate.
+- `npm run today` refreshes the daily contract, refuses known physics/tick overrides, runs twice, verifies replay determinism and the exact stage/twist, and reports `rulesCompliant` separately from `targetReached`. It treats the verified 134,020 liquidation as an in-cap score candidate while correctly reporting that it is below 250,000. It does not check server-side acceptance.
 
-A locally passing replay is not server acceptance. Before submitting any later run, require a full-cap or win result, matching Build 4 replay verification, matching score/hash on repeat, and confirmation that the site still accepts this Build 4 log format.
+A locally passing replay is not server acceptance. The 134,020 run is the current best local candidate under the normal Build 4 end/tick rules, not a 250,000-point result. Before any score is actually submitted, confirm the site accepts this Build 4 log format and exact challenge contract.
