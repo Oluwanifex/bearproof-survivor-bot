@@ -54,8 +54,9 @@ All candidates below used the same live Build 4 seed and twist, standard physics
 | Pepe + defense-weighted picks | 65,441 | 39,162 | 1 | Liquidated | Verified |
 | Pepe + pure defensive picks | 37,954 | 43,227 | 1 | Liquidated | Verified |
 | Pepe + high-firepower upgrade set | 55,118 | 23,973 | 1 | Liquidated | Verified |
+| Pepe + periodic square-route movement | 27,071 | 72,000 | 0 | Market closed | Verified (`4369d6fd`) |
 
-The movement-only orbit/constant-route experiments performed worse than contextual kiting. Increasing passive defense alone extended some runs but reduced kill throughput; the tested upgrade target and steering values therefore do not establish a route to 250,000.
+The movement-only orbit/constant-route experiments performed worse than contextual kiting. One periodic square-route replay did survive to the exact 72,000-tick cap (992 kills, level 11, hash `4369d6fd`), but scored only 27,071 and killed no bosses. Increasing passive defense alone extended some runs but reduced kill throughput; the tested upgrade target and steering values therefore do not establish a route to 250,000.
 
 ## Commands and status
 
