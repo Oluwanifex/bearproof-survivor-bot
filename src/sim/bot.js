@@ -122,8 +122,10 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                         fy += (by * projectileMultiplier) / (d2 + 30);
                     }
                 }
-                const len = Math.hypot(fx, fy);
-                return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+                if (process.env.FINAL_BOSS_HOLD_BLEND !== '1') {
+                    const len = Math.hypot(fx, fy);
+                    return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+                }
             }
             if (finalBoss && (delayedBossMode ? chipAttack || scheduledBossAttack : p.hp > bossBudget)) {
                 const dx = finalBoss.x - p.x;
@@ -143,8 +145,10 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                     const bd = Math.hypot(bx, by) || 1;
                     if (bd < 150) { fx += bx / bd * (160 - bd) / 80; fy += by / bd * (160 - bd) / 80; }
                 }
-                const len = Math.hypot(fx, fy);
-                return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+                if (process.env.FINAL_BOSS_ATTACK_BLEND !== '1') {
+                    const len = Math.hypot(fx, fy);
+                    return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+                }
             }
             const farmWindows = String(process.env.BOSS_FARM_WINDOWS || '').split(',').filter(Boolean).map((part) => part.split('-').map(Number));
             const inBossWindow = !farmWindows.length || farmWindows.some(([start, end]) => sim.time >= start && sim.time < end);
@@ -160,8 +164,10 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const pull = Number(process.env.BOSS_FARM_PULL || 0.02);
                 fx += (dx / d) * radial * pull - (dy / d) * tangent;
                 fy += (dy / d) * radial * pull + (dx / d) * tangent;
-                const len = Math.hypot(fx, fy);
-                return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+                if (process.env.BOSS_FARM_BLEND !== '1') {
+                    const len = Math.hypot(fx, fy);
+                    return len < 1e-6 ? 0 : encodeMove(fx / len, fy / len);
+                }
             }
             if (style === 'reckless') {
                 const e = nearest(sim.enemies, p);
@@ -231,6 +237,8 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                     && !projectileThreat && p.hp / Math.max(1, p.maxHp) >= decoyGate && crowd >= decoyCrowd && !xpRecovery) {
                     let ax = 0;
                     let ay = 0;
+                    const awayX = (p.x - orb.x) / (orbDistance || 1);
+                    const awayY = (p.y - orb.y) / (orbDistance || 1);
                     for (const e of sim.enemies) {
                         const dx = p.x - e.x;
                         const dy = p.y - e.y;
@@ -240,6 +248,11 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                         ax += dx * weight;
                         ay += dy * weight;
                     }
+                    const enemyLength = Math.hypot(ax, ay) || 1;
+                    const awayWeight = Number(process.env.XP_DECOY_AWAY_WEIGHT || 1);
+                    const threatWeight = Number(process.env.XP_DECOY_THREAT_WEIGHT || 0.35);
+                    ax = awayX * awayWeight + (ax / enemyLength) * threatWeight;
+                    ay = awayY * awayWeight + (ay / enemyLength) * threatWeight;
                     const al = Math.hypot(ax, ay);
                     if (al > 1e-6) {
                         xpRecovery = { phase: 'decoy', until: t + decoyDuration, x: ax / al, y: ay / al, orb };

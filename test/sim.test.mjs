@@ -4,6 +4,10 @@ import { SIM } from '../src/sim/content.js';
 import { decodeRunLog } from '../src/sim/runlog.js';
 import { Simulation, SIM_VERSION } from '../src/sim/sim.js';
 import { BuildPlanner, marginalWeaponDps } from '../src/sim/planner.js';
+import { chooseBuild4Profile } from '../run-bot.mjs';
+import { createBot } from '../src/sim/bot.js';
+import { MOVE_TABLE } from '../src/sim/input-codes.js';
+import { BUILD4_TARGET_PRESET, matchesBuild4TargetPreset } from '../src/sim/build4-target-preset.js';
 
 test('simulation clone advances deterministically without changing the source', () => {
   const sim = new Simulation({ seed: 42 });
@@ -36,6 +40,40 @@ test('planner evaluates weapon-specific marginal DPS and reserves slots', () => 
   const card = { kind: 'weapon', id: 'laser_eyes', isNew: true, level: 1 };
   assert.ok(marginalWeaponDps(card, sim) > 0);
   assert.ok(planner.reservedWeapons.length > 0);
+});
+
+test('experimental Build 4 upgrade profiles return an offered legal card', () => {
+  const sim = new Simulation({ seed: 11 });
+  sim.player.passives.hedge = { count: 2 };
+  sim.choices = [
+    { kind: 'passive', id: 'leverage' },
+    { kind: 'weapon', id: 'tongue', evolves: false },
+    { kind: 'heal', id: 'heal' },
+  ];
+  assert.equal(chooseBuild4Profile(sim, 'leveraged'), 0);
+  for (const profile of ['combat', 'offense', 'defense', 'xp', 'leveraged', 'glass']) {
+    const index = chooseBuild4Profile(sim, profile);
+    assert.ok(Number.isInteger(index) && index >= 0 && index < sim.choices.length, `${profile} returned ${index}`);
+  }
+});
+
+test('331k Build 4 preset is restricted to its exact daily challenge contract', () => {
+  const matching = {
+    date: '2026-09-26', build: 4, stage: 'winter', seed: 526031759,
+    twist: { id: 'flash_crash' },
+  };
+  assert.equal(BUILD4_TARGET_PRESET.achievedScore, 331_118);
+  assert.equal(BUILD4_TARGET_PRESET.bossKills, 4);
+  assert.equal(matchesBuild4TargetPreset(matching), true);
+  for (const change of [
+    { date: '2026-09-27' },
+    { build: 3 },
+    { stage: 'bull' },
+    { seed: 1 },
+    { twist: { id: 'different' } },
+  ]) {
+    assert.equal(matchesBuild4TargetPreset({ ...matching, ...change }), false);
+  }
 });
 
 test('replay decoder enforces the immutable 72,000-tick build cap', () => {
@@ -80,4 +118,40 @@ test('Build 4 state hash includes crate timing, loot, and position', () => {
   assert.equal(clone.stateHash(), sim.stateHash());
   clone.crates[0].x += 1;
   assert.notEqual(clone.stateHash(), sim.stateHash());
+});
+
+test('XP decoy deliberately draws pursuit away from the targeted orb', () => {
+  const previous = {};
+  const overrides = {
+    XP_DECOY: '1', XP_DECOY_CROWD: '2', XP_DECOY_MIN_DISTANCE: '120',
+    XP_DECOY_MIN_HP: '0.5', XP_DECOY_AWAY_WEIGHT: '4', XP_DECOY_THREAT_WEIGHT: '0',
+    XP_DECOY_FORCE: '0.1', DAILY_PROJECTILE_MULT: '1', HEAL_RETREAT: '0',
+  };
+  for (const [key, value] of Object.entries(overrides)) {
+    previous[key] = process.env[key];
+    process.env[key] = value;
+  }
+  try {
+    const bot = createBot({ style: 'daily' });
+    const sim = {
+      time: 300,
+      player: { x: 0, y: 0, hp: 100, maxHp: 100, getDamageReduction: () => 0 },
+      enemies: [
+        { x: 50, y: 0, size: 20 }, { x: -50, y: 0, size: 20 },
+        { x: 0, y: 50, size: 20 }, { x: 0, y: -50, size: 20 },
+      ],
+      enemyProjectiles: [],
+      xp: [{ x: 200, y: 0, value: 10, life: 20, dead: false, collected: false }],
+      crates: [],
+      stats: { damageDealt: 0, damageTaken: 0 },
+    };
+    const move = bot.move(sim);
+    assert.equal(bot.diagnostics.decoyStarts, 1);
+    assert.ok(MOVE_TABLE[move][0] < 0, `expected movement away from XP to the east, got ${MOVE_TABLE[move]}`);
+  } finally {
+    for (const key of Object.keys(overrides)) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
 });
