@@ -11,6 +11,9 @@ import { encodeMove } from './input-codes.js';
 export function createBot({ style = 'survive', phase = 0 } = {}) {
     let t = phase;
     let xpRecovery = null;
+    let nextDecoyAt = 0;
+    let healthRetreat = false;
+    const diagnostics = { retreatStarts: 0, retreatTicks: 0, decoyStarts: 0, returnStarts: 0, returnTicks: 0, decoyCollected: 0, returnCollected: 0, targetExpired: 0 };
     return {
         /** Move code for this tick. */
         move(sim) {
@@ -18,6 +21,48 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
             const p = sim.player;
             let fx = 0;
             let fy = 0;
+            if (style === 'daily' && process.env.HEAL_RETREAT === '1' && p._sum('hpRegen') > 0) {
+                const hpRatio = p.hp / Math.max(1, p.maxHp);
+                const retreatAt = Number(process.env.HEAL_RETREAT_START || 0.35);
+                const returnAt = Number(process.env.HEAL_RETREAT_EXIT || 0.72);
+                if (!healthRetreat && hpRatio <= retreatAt) {
+                    healthRetreat = true;
+                    diagnostics.retreatStarts++;
+                }
+                else if (healthRetreat && hpRatio >= returnAt) healthRetreat = false;
+                if (healthRetreat) {
+                    diagnostics.retreatTicks++;
+                    for (const e of sim.enemies) {
+                        const dx = p.x - e.x;
+                        const dy = p.y - e.y;
+                        const d2 = dx * dx + dy * dy;
+                        const keep = (e.boss ? 250 : 200) + e.size;
+                        if (d2 > keep * keep) continue;
+                        const w = (e.boss ? 5 : 2) / (d2 + 40);
+                        fx += dx * w;
+                        fy += dy * w;
+                    }
+                    for (const b of sim.enemyProjectiles) {
+                        const dx = p.x - b.x;
+                        const dy = p.y - b.y;
+                        const d2 = dx * dx + dy * dy;
+                        if (d2 < 180 * 180) {
+                            fx += dx / (d2 + 30) * 6;
+                            fy += dy / (d2 + 30) * 6;
+                        }
+                    }
+                    const len = Math.hypot(fx, fy);
+                    if (len > 1e-6) return encodeMove(fx / len, fy / len);
+                    const nearestThreat = nearest(sim.enemies, p);
+                    if (nearestThreat) {
+                        fx = p.x - nearestThreat.x;
+                        fy = p.y - nearestThreat.y;
+                        const away = Math.hypot(fx, fy) || 1;
+                        return encodeMove(fx / away, fy / away);
+                    }
+                    return 0;
+                }
+            }
             const finalBoss = sim.enemies.find((e) => e.boss && e.def.final && e.hp > 0);
             const bossBudgetFactor = Number(process.env.BOSS_BUDGET_FACTOR || 0.65);
             const bossBudget = p.maxHp * bossBudgetFactor + p.getDamageReduction() * p.maxHp;
@@ -169,8 +214,21 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 const decoyCrowd = Number(process.env.XP_DECOY_CROWD || 5);
                 const decoyDuration = Number(process.env.XP_DECOY_SECONDS || 2.5) * 60;
                 const decoyGate = Number(process.env.XP_DECOY_MIN_HP || 0.55);
-                const returning = xpRecovery && t < xpRecovery.until;
-                if (decoyEnabled && orb && !projectileThreat && p.hp / Math.max(1, p.maxHp) >= decoyGate && crowd >= decoyCrowd && !returning) {
+                const decoyMinDistance = Number(process.env.XP_DECOY_MIN_DISTANCE || 120);
+                if (xpRecovery && xpRecovery.orb.dead) {
+                    if (xpRecovery.orb.collected) {
+                        if (xpRecovery.phase === 'return') diagnostics.returnCollected++;
+                        else diagnostics.decoyCollected++;
+                    } else diagnostics.targetExpired++;
+                    xpRecovery = null;
+                }
+                if (xpRecovery?.phase === 'decoy' && t >= xpRecovery.until) {
+                    xpRecovery.phase = 'return';
+                    diagnostics.returnStarts++;
+                }
+                const orbDistance = orb ? Math.hypot(orb.x - p.x, orb.y - p.y) : 0;
+                if (decoyEnabled && orb && orbDistance >= decoyMinDistance && t >= nextDecoyAt
+                    && !projectileThreat && p.hp / Math.max(1, p.maxHp) >= decoyGate && crowd >= decoyCrowd && !xpRecovery) {
                     let ax = 0;
                     let ay = 0;
                     for (const e of sim.enemies) {
@@ -183,21 +241,27 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                         ay += dy * weight;
                     }
                     const al = Math.hypot(ax, ay);
-                    if (al > 1e-6) xpRecovery = { until: t + decoyDuration, x: ax / al, y: ay / al };
+                    if (al > 1e-6) {
+                        xpRecovery = { phase: 'decoy', until: t + decoyDuration, x: ax / al, y: ay / al, orb };
+                        nextDecoyAt = t + Number(process.env.XP_DECOY_COOLDOWN || 10) * 60;
+                        diagnostics.decoyStarts++;
+                    }
                 }
-                if (returning) {
-                    const urgency = orb ? 1 + Math.max(0, 8 - orb.life) / 8 : 1;
+                if (xpRecovery?.phase === 'decoy') {
                     fx += xpRecovery.x * Number(process.env.XP_DECOY_FORCE || 0.025);
                     fy += xpRecovery.y * Number(process.env.XP_DECOY_FORCE || 0.025);
-                    if (orb && t + 1 >= xpRecovery.until) {
-                        const dx = orb.x - p.x;
-                        const dy = orb.y - p.y;
-                        const d = Math.hypot(dx, dy) || 1;
-                        const force = Number(process.env.XP_RETURN_FORCE || 0.045) * urgency;
-                        fx += (dx / d) * force;
-                        fy += (dy / d) * force;
-                    }
-                } else if (crate && crowd < 2) {
+                } else if (xpRecovery?.phase === 'return') {
+                    diagnostics.returnTicks++;
+                    const targetOrb = xpRecovery.orb;
+                    const urgency = 1 + Math.max(0, 8 - targetOrb.life) / 8;
+                    const dx = targetOrb.x - p.x;
+                    const dy = targetOrb.y - p.y;
+                    const d = Math.hypot(dx, dy) || 1;
+                    const force = Number(process.env.XP_RETURN_FORCE || 0.045) * urgency;
+                    fx += (dx / d) * force;
+                    fy += (dy / d) * force;
+                    if (d < 24) xpRecovery = null;
+                } else if (crate && crowd < Number(process.env.CRATE_MAX_CROWD || 2)) {
                     const dx = crate.x - p.x;
                     const dy = crate.y - p.y;
                     const d = Math.hypot(dx, dy) || 1;
@@ -257,7 +321,8 @@ export function createBot({ style = 'survive', phase = 0 } = {}) {
                 if (score(c) > score(sim.choices[best])) best = i;
             });
             return best;
-        }
+        },
+        diagnostics,
     };
 }
 

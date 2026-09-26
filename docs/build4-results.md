@@ -2,7 +2,7 @@
 
 ## Live contract
 
-`GET https://bearproof.app/api/daily` returned the following contract during tuning. Refresh it before any later run; this is a dated result.
+`GET https://bearproof.app/api/daily` returned this contract during tuning. Refresh it before any later run; this is a dated result.
 
 | Field | Value |
 | --- | --- |
@@ -11,57 +11,67 @@
 | Seed | `526031759` |
 | Stage | Crypto Winter (`winter`) |
 | Twist | Flash Crash (`flash_crash`) |
-| Tick cap | 72,000 (20 minutes) |
+| Tick cap | 72,000 ticks / 20 minutes |
 | Simulation version | `4` |
 | Build source commit | `1f68eabbc04bcf838277bc7a9122ac2a4e1274c9` |
 
-Flash Crash doubles the bear spawn rate and halves enemy HP. Crypto Winter applies the official 0.9 player-speed multiplier, +20% enemy HP, and one point of unavoidable cold damage every ten seconds. No weapon cooldown/fire-rate, spread, movement-speed, enemy-stat, or tick-cap physics override was set during any run below.
+Flash Crash doubles bear spawn rate and halves enemy HP. Crypto Winter applies the official 0.9 player-speed multiplier, +20% enemy HP, and one unavoidable cold damage every ten seconds. All reported candidates used **normal Build 4 physics**: no weapon cooldown/fire-rate, spread, player/enemy speed/stat, spawn, XP, or tick-cap overrides.
 
-## Best candidate observed
+## Best verified candidate
 
-The highest score in the completed legal policy sweep was the `pepe-boss-soft-220` candidate. Its controller settings were Pepe, Build 4 card scoring, daily threat radius 70, projectile steering 4.5, drift 0.003, crate attraction 0.02, and non-final-boss steering enabled at range 220/pull 0.02. Those parameters affect only recorded legal movement choices and upgrade selection.
+The best current candidate is `pepe-retreat55-boss35` with the standard Build 4 legal upgrade scorer. Movement choices use Pepe, threat radius 70, projectile steering 4.5, drift 0.003, crate attraction 0.02, and soft stage-boss steering (range 220, pull 0.02). It retreats below 55% HP and resumes normal operation above 86%; it uses a 0.35 player-health boss-engagement budget. These are controller decisions only, not physics changes.
 
 | Metric | Result |
 | --- | ---: |
-| Score | **134,020** |
-| Ticks / time | 41,030 / 11:23.83 |
-| End reason | **Liquidated** |
-| Kills / bosses | 4,935 / 3 |
-| Level | 33 |
-| Crates collected | 11 |
-| Survival points | 6,830 |
-| Ordinary kill points | 113,940 |
-| Boss points | 13,250 |
-| Final-boss win bonus | 0 |
-| Replay bytes | 38,541 |
-| Local replay hash | `8e8adb99` |
-| Local replay verifier | Passed; replay score/hash matched |
+| Score | **210,732** |
+| Score target | 250,000 — **not reached** |
+| Gap to target | 39,268 |
+| Ticks / elapsed time | 52,455 / 874.250 seconds (14:34.250) |
+| End reason | **Won** |
+| Kills / bosses | 6,655 / 4 |
+| Level | 34 |
+| Survival points | 8,740 |
+| Ordinary kill points | 153,742 |
+| Boss points | 23,250 |
+| Final-boss win bonus | 25,000 |
+| Official supply crates collected | 12 |
+| Crate loot | 4 shields, 5 printers, 3 magnets |
+| Evolved weapons | Tongue Lash, Laser Eyes, Buyback, Diamond Hands |
+| Passives | High Frequency 2, Whale Gravity 1, Thick Skin 2, DCA 2, Hedge 1, Slippage 1 |
+| Replay bytes | 57,116 |
+| Replay hash | `a02b2014` |
+| Replay verifier | Passed; replay score/hash matched |
+| Repeated run | Same score/hash; deterministic |
 
-This is the **best locally replay-verified score candidate** observed in the documented sweep. Liquidation at 41,030 ticks is below (not beyond) Build 4's 72,000-tick cap; no physics override was used. The result therefore complies with the local Build 4 simulation/tick-limit checks. The requested **250,000** score target was not reached, and Bearproof server-side acceptance has not been checked. No score was submitted.
+The 210,732 result improves the prior 134,020 in-cap candidate by 76,712 points. The official cap is a maximum, not a minimum: winning at 52,455 ticks is within the 72,000-tick rule. The replay is locally verified and rules-compliant; **Bearproof server-side acceptance has not been checked**, and no score was submitted from this simulator task.
 
-A diagnostic replay showed the player at 107/108 HP around 11 minutes but accumulated contact damage as the enemy count rose (80 at 10 minutes, 86 at 11 minutes). The non-final Long Winter boss was nearly defeated at 11 minutes; liquidation followed at 11:23. This points to later crowd/contact pressure and lost uptime as the immediate bottleneck, not an expired tick cap.
+## User-proposed tactics tested
 
-## Selected comparable runs
+- **Airdrop crates:** the best run collected 12 official crates, including shield, printer, and magnet effects. Crate seeking stays a movement preference; the game’s crate drops and effects are unchanged.
+- **Whale Gravity:** the best build took it once, adding +30% pickup range. Repeatedly forcing it was not better.
+- **Decoy and return for XP:** decoy/return experiments did not improve the winning score. The winning controller disabled the decoy (`XP_DECOY=0`); its diagnostics show no decoy or return starts.
+- **Healing retreat / DCA:** the 55% retreat policy was selected. The winning build had DCA 2 (1 HP/s total regeneration), plus Hedge 1 (8% damage reduction).
+- **Attack and weapon growth:** the build ended with High Frequency 2 (8% per stack) and four weapon evolutions. Conviction and Leverage were not part of the best build. A Leverage-after-Hedge strategy scored 106,564 and liquidated early.
+- **Extra XP pull:** stronger XP attraction (up to 0.06 versus the ordinary 0.012 fallback) caused earlier deaths; it did not improve score.
 
-All runs below used the same live Build 4 seed and twist, standard physics, legal replay inputs, and a locally verified replay. A liquidation before the cap is a normal Build 4 end state; scores are compared regardless of whether the run reached the market-close tick.
+## Nearby experiments and tradeoffs
 
-| Candidate | Score | Ticks | Bosses | End reason | Replay |
+| Candidate/experiment | Score | Ticks | Bosses | Outcome | Finding |
 | --- | ---: | ---: | ---: | --- | --- |
-| Pepe balanced + crate targeting | 109,948 | 37,265 | 2 | Liquidated | Verified |
-| Pepe + soft boss steering, range 150 | 117,472 | 36,452 | 2 | Liquidated | Verified |
-| Pepe + soft boss steering, range 220 | **134,020** | 41,030 | 3 | Liquidated | Verified |
-| Pepe + soft boss steering, range 300 | 123,380 | 43,444 | 2 | Liquidated | Verified |
-| Pepe + defense-weighted picks | 65,441 | 39,162 | 1 | Liquidated | Verified |
-| Pepe + pure defensive picks | 37,954 | 43,227 | 1 | Liquidated | Verified |
-| Pepe + high-firepower upgrade set | 55,118 | 23,973 | 1 | Liquidated | Verified |
-| Pepe + periodic square-route movement | 27,071 | 72,000 | 0 | Market closed | Verified (`4369d6fd`) |
+| Best policy, auto engage with 0.35 health budget | **210,732** | 52,455 | 4 | Won | Best verified score; hash `a02b2014` |
+| Delay final-boss engagement to 19:00–19:30 | 207,892 | 61,034 | 3 | Liquidated | More ordinary kill points, but lost the final-boss kill and 25,000-point win bonus |
+| Earlier policy, soft boss steering at range 220 | 134,020 | 41,030 | 3 | Liquidated | Prior best before boss-budget/retreat tuning |
+| Bull character with otherwise matching strategy | 43,947 | 22,294 | 1 | Liquidated | Pepe was substantially better on this seed |
+| Decoy/return, extra XP pull, and forced evolution/combat builds | Below 110,000 in tested runs | Varied | Varied | Mostly liquidated | Did not beat the best combined strategy |
+| Periodic square-route movement | 27,071 | 72,000 | 0 | Market closed | Survived to the full cap but had very low scoring throughput |
 
-The movement-only orbit/constant-route experiments performed worse than contextual kiting. One periodic square-route replay did survive to the exact 72,000-tick cap (992 kills, level 11, hash `4369d6fd`), but scored only 27,071 and killed no bosses. Increasing passive defense alone extended some runs but reduced kill throughput; the tested upgrade target and steering values therefore do not establish a route to 250,000.
+The best score remains **39,268 below 250,000**. This search does not prove the target impossible; it shows the current tested legal strategies have not reached it. The higher-scoring delayed-boss run illustrates the tradeoff: kill farming increased, but the final win bonus was lost.
 
-## Commands and status
+## Runner and verification
 
 - `npm run build` runs static checks and unit tests.
-- `npm run tune:build4` sweeps the current challenge candidates; use `TUNE_ONLY=name1,name2` to rerun selected variants.
-- `npm run today` refreshes the daily contract, refuses known physics/tick overrides, runs twice, verifies replay determinism and the exact stage/twist, and reports `rulesCompliant` separately from `targetReached`. It treats the verified 134,020 liquidation as an in-cap score candidate while correctly reporting that it is below 250,000. It does not check server-side acceptance.
+- `npm run tune:build4` runs the strategy tuner against the live Build 4 contract and replay-checks each candidate. `TUNE_ONLY=name1,name2` reruns selected variants.
+- `npm run today` refreshes the daily contract, refuses known physics/tick overrides, runs twice, checks hash/score reproducibility, validates the replay/stage/twist, and reports `rulesCompliant` separately from `targetReached`.
+- `npm run today` does **not** submit a score or check server-side acceptance.
 
-A locally passing replay is not server acceptance. The 134,020 run is the current best local candidate under the normal Build 4 end/tick rules, not a 250,000-point result. Before any score is actually submitted, confirm the site accepts this Build 4 log format and exact challenge contract.
+For a later date, treat this as historical data and rerun only after confirming the live build, seed, stage, and twist. See [Build 4 source provenance](build4-sources.md) and [runtime guardrails](railway-variables.md).

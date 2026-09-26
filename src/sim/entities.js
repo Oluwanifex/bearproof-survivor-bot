@@ -496,6 +496,7 @@ export class XpOrb {
         this.life -= dt;
         if (this.life <= 0) {
             this.dead = true;
+            sim.stats.xpExpired += this.value;
             return;
         }
         const p = sim.player;

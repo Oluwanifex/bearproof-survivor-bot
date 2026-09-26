@@ -30,6 +30,11 @@ const policyDefaults = {
   BOSS_SOFT: '1',
   BOSS_SOFT_RANGE: '220',
   BOSS_SOFT_PULL: '0.02',
+  BOSS_BUDGET_FACTOR: '0.35',
+  HEAL_RETREAT: '1',
+  HEAL_RETREAT_START: '0.55',
+  HEAL_RETREAT_EXIT: '0.86',
+  XP_DECOY: '0',
 };
 for (const [name, value] of Object.entries(policyDefaults)) process.env[name] ??= value;
 

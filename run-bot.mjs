@@ -1,7 +1,7 @@
 import { Simulation } from './src/sim/sim.js';
 import { createBot } from './src/sim/bot.js';
 import { RunRecorder, toBase64Url } from './src/sim/runlog.js';
-import { dailyTwistForSeed, PASSIVES, WEAPONS } from './src/sim/content.js';
+import { dailyTwistForSeed, PASSIVES, SIM, WEAPONS } from './src/sim/content.js';
 import { BuildPlanner } from './src/sim/planner.js';
 
 const TARGET = Number(process.env.DESIRED_SCORE || 300_000);
@@ -48,7 +48,7 @@ export function chooseBuild4Upgrade(sim) {
     if (card.kind === 'heal') score = hp < policy.heal ? 1000 : 0;
     else if (card.kind === 'passive') {
       const count = sim.player.passives[card.id]?.count || 0;
-      if (count < 5) {
+      if (count < SIM.PASSIVE_MAX_STACK) {
         const weights = {
           dca: policy.dca, hedge: policy.hedge, cold_wallet: policy.cold,
           thick_skin: policy.thick, slippage: policy.slip, high_frequency: policy.hf,
