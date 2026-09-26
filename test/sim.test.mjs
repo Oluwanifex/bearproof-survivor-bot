@@ -4,22 +4,23 @@ import { SIM } from '../src/sim/content.js';
 import { decodeRunLog } from '../src/sim/runlog.js';
 import { Simulation, SIM_VERSION } from '../src/sim/sim.js';
 import { BuildPlanner, marginalWeaponDps } from '../src/sim/planner.js';
-import { advanceInteractiveRun, chooseBuild4Profile, createInteractiveRun } from '../run-bot.mjs';
+import { advanceInteractiveRun, chooseBuild4Profile, chooseRetirementUpgrade, createInteractiveRun } from '../run-bot.mjs';
 import { createBot } from '../src/sim/bot.js';
 import { MOVE_TABLE } from '../src/sim/input-codes.js';
 import { BUILD4_TARGET_PRESET, matchesBuild4TargetPreset } from '../src/sim/build4-target-preset.js';
-import { parsePlayCommand } from '../src/play-command.mjs';
+import { parsePlayArgs } from '../src/play-command.js';
 
 test('Play command keeps Auto syntax and accepts an optional positive target', () => {
   const address = '11111111111111111111111111111111';
-  assert.deepEqual(parsePlayCommand(`/play yagami ${address} Auto 137000`), {
-    username: 'yagami', payout: address, auto: true, targetScore: 137000,
+  assert.deepEqual(parsePlayArgs(['yagami', address, 'Auto', '137000']), {
+    name: 'yagami', payout: address, auto: true, scoreTarget: 137000,
   });
-  assert.deepEqual(parsePlayCommand(`/play yagami ${address} Auto`), {
-    username: 'yagami', payout: address, auto: true, targetScore: null,
+  assert.deepEqual(parsePlayArgs(['yagami', address, 'Auto']), {
+    name: 'yagami', payout: address, auto: true, scoreTarget: null,
   });
-  assert.ok(parsePlayCommand(`/play yagami ${address} Auto 0`).error);
-  assert.ok(parsePlayCommand(`/play yagami ${address} 137000`).error);
+  assert.equal(parsePlayArgs(['yagami', address, 'Auto', '137,000']).scoreTarget, 137000);
+  assert.throws(() => parsePlayArgs(['yagami', address, 'Auto', '0']));
+  assert.throws(() => parsePlayArgs(['yagami', address, '137000']));
 });
 
 test('interactive Auto run disengages movement after its score target but keeps simulating', () => {
@@ -31,7 +32,7 @@ test('interactive Auto run disengages movement after its score target but keeps 
 
   const result = advanceInteractiveRun(run, { maxTicks: 1 });
   assert.equal(result.status, 'running');
-  assert.equal(run.disengaged, true);
+  assert.equal(run.retiring, true);
   assert.equal(movementCalls, 0);
   assert.equal(run.sim.tick, 1);
 
@@ -42,6 +43,12 @@ test('interactive Auto run disengages movement after its score target but keeps 
   assert.equal(fullRunResult.status, 'running');
   assert.equal(fullRun.disengaged, undefined);
   assert.equal(fullRunMovementCalls, 1);
+
+  run.sim.choices = [
+    { kind: 'heal', id: 'heal' },
+    { kind: 'weapon', id: 'tongue' },
+  ];
+  assert.equal(chooseRetirementUpgrade(run.sim), 1);
 });
 
 test('simulation clone advances deterministically without changing the source', () => {
