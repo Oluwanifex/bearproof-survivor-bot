@@ -51,6 +51,11 @@ test('interactive Auto run disengages movement after its score target but keeps 
   assert.equal(chooseRetirementUpgrade(run.sim), 1);
 });
 
+test('interactive replay records the selected character for server verification', () => {
+  const run = createInteractiveRun(13, { mode: 'daily', character: 'pepe' });
+  assert.equal(decodeRunLog(run.recorder.toBytes()).character, 'pepe');
+});
+
 test('simulation clone advances deterministically without changing the source', () => {
   const sim = new Simulation({ seed: 42 });
   for (let i = 0; i < 120; i++) sim.step(0);

@@ -283,7 +283,7 @@ export function createInteractiveRun(seed, { mode = 'free', twist = null, charac
   sim.botMove = (state) => bot.move(state);
   return {
     sim,
-    recorder: new RunRecorder(seed, resolvedTwist),
+    recorder: new RunRecorder(seed, resolvedTwist, character),
     bot,
     seed,
     twist: resolvedTwist,
